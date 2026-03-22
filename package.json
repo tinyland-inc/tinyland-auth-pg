@@ -1,0 +1,68 @@
+{
+  "name": "@tummycrypt/tinyland-auth-pg",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jesssullivan/tinyland-auth-pg.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./schema": {
+      "import": "./dist/schema.js",
+      "types": "./dist/schema.d.ts"
+    },
+    "./business-schema": {
+      "import": "./dist/business-schema.js",
+      "types": "./dist/business-schema.d.ts"
+    },
+    "./content-schema": {
+      "import": "./dist/content-schema.js",
+      "types": "./dist/content-schema.d.ts"
+    },
+    "./booking-schema": {
+      "import": "./dist/booking-schema.js",
+      "types": "./dist/booking-schema.d.ts"
+    },
+    "./giftcert-schema": {
+      "import": "./dist/giftcert-schema.js",
+      "types": "./dist/giftcert-schema.d.ts"
+    },
+    "./intake-schema": {
+      "import": "./dist/intake-schema.js",
+      "types": "./dist/intake-schema.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:watch": "vitest watch",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "drizzle-orm": "0.39.3"
+  },
+  "peerDependencies": {
+    "@tummycrypt/tinyland-auth": "^0.2.0"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.30.5",
+    "typescript": "5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
