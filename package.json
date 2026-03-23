@@ -5,11 +5,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Jesssullivan/tinyland-auth-pg.git"
+    "url": "https://github.com/tinyland-inc/tinyland-auth-pg.git"
   },
   "publishConfig": {
-    "access": "public",
-    "access": "restricted"
+    "access": "public"
   },
   "exports": {
     ".": {
