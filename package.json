@@ -41,7 +41,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.js.map"
   ],
   "scripts": {
     "build": "tsc",
