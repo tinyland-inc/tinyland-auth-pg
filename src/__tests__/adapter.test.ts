@@ -5,7 +5,7 @@
  * call the right Drizzle operations with correct arguments.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 // Fixed tenant UUID used across all fixture rows and adapter call sites so
 // tests exercise the Pattern B contract (every method accepts tenantId first).
@@ -81,31 +81,6 @@ const totpRow = {
 	version: 1,
 	lastUsedAt: '2026-03-20T00:00:00Z',
 	createdAt: '2026-03-01T00:00:00Z',
-};
-
-const backupRow = {
-	id: 'backup-1',
-	tenantId: TEST_TENANT_ID,
-	userId: '550e8400-e29b-41d4-a716-446655440000',
-	codes: [{ hash: '$2b$10$abc', used: false }],
-	generatedAt: '2026-03-01T00:00:00Z',
-	lastUsedAt: null,
-};
-
-const invitationRow = {
-	id: 'inv-1',
-	tenantId: TEST_TENANT_ID,
-	token: 'invite-token-123',
-	email: 'new@example.com',
-	role: 'viewer',
-	createdBy: 'jen',
-	isActive: true,
-	expiresAt: '2026-04-01T00:00:00Z',
-	usedAt: null,
-	usedBy: null,
-	temporaryTotpSecret: null,
-	metadata: null,
-	createdAt: '2026-03-22T00:00:00Z',
 };
 
 const auditRow = {
