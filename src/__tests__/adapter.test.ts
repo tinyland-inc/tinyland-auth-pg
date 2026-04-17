@@ -236,7 +236,7 @@ describe('createPgStorageAdapter', () => {
 // ---------------------------------------------------------------------------
 
 describe('PgStorageAdapter interface', () => {
-	it('implements all IStorageAdapter methods', async () => {
+	it('exposes all expected storage adapter methods', async () => {
 		const { PgStorageAdapter } = await import('../adapter.js');
 
 		// Verify all expected methods exist on the prototype
