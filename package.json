@@ -61,7 +61,10 @@
     "@tummycrypt/tinyland-auth": "^0.2.0"
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "^11.14.0",
     "drizzle-kit": "^0.30.5",
+    "postgres": "^3.4.9",
+    "testcontainers": "^11.14.0",
     "typescript": "5.9.3",
     "vitest": "^4.0.18"
   }
