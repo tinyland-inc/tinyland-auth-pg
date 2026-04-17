@@ -1,17 +1,27 @@
 /**
  * PostgreSQL Storage Adapter for @tummycrypt/tinyland-auth
  *
- * Backed by Neon Serverless PG + Drizzle ORM.
- * Mirrors the RedisStorageAdapter API surface with SQL queries.
+ * v0.2.0 — driver-agnostic + Pattern B tenant scoping.
+ *
+ * Usage:
+ *   // Preferred: inject a pre-built drizzle client (postgres.js, node-postgres, neon-http)
+ *   const adapter = createPgStorageAdapter({ db });
+ *
+ *   // Legacy: neon-http path (kept for backward-compat)
+ *   const adapter = createPgStorageAdapter({ connectionString });
+ *
+ * Every method takes `tenantId: string` as its first parameter. Every INSERT
+ * sets `tenant_id` on the row; every SELECT/UPDATE/DELETE filters by `tenant_id`.
  */
 
 import { neon } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-http';
+import { drizzle as drizzleNeon } from 'drizzle-orm/neon-http';
 import type { NeonHttpDatabase } from 'drizzle-orm/neon-http';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, and, lt, gt, desc, sql, count as countFn } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import * as schema from './schema.js';
-import type { IStorageAdapter, AuditEventFilters } from '@tummycrypt/tinyland-auth/storage';
+import type { AuditEventFilters } from '@tummycrypt/tinyland-auth/storage';
 import type {
   AdminUser,
   Session,
@@ -22,17 +32,51 @@ import type {
   AuditEvent,
 } from '@tummycrypt/tinyland-auth/types';
 
-export interface PgStorageConfig {
-  /** Neon connection string (required) */
-  connectionString: string;
-  /** Session TTL in milliseconds (default: 7 days) */
-  sessionMaxAge?: number;
-}
+// ---------------------------------------------------------------------------
+// Public types
+// ---------------------------------------------------------------------------
+
+/**
+ * Union of supported drizzle-orm database clients.
+ *
+ * NOTE: this union is accepted at the factory boundary for DI, but internal
+ * query builders currently type-narrow against the neon-http shape because
+ * the drizzle-orm `select()/insert()/update()/delete()` return types diverge
+ * slightly between drivers. The runtime query builder is fully compatible
+ * across drivers — this is purely a tsc ergonomics cap that will resolve
+ * once drizzle-orm's generic union inference improves OR once we cross-repo
+ * uplift the peer types to a unified shape.
+ */
+export type Database =
+  | NeonHttpDatabase<typeof schema>
+  | PostgresJsDatabase<typeof schema>;
+
+/**
+ * Domain objects from `@tummycrypt/tinyland-auth/types` don't natively carry
+ * `tenantId`. We widen locally so the adapter can surface the column without
+ * a breaking cross-repo change. A follow-up `@tummycrypt/tinyland-auth@0.3.0`
+ * will remove the need for this wrapper.
+ */
+export type TenantScoped<T> = T & { tenantId: string };
+
+export type PgStorageConfig =
+  | {
+      /** Pre-built drizzle client (preferred). Accepts postgres.js, node-postgres, neon-http. */
+      db: Database;
+      /** Session TTL in milliseconds (default: 7 days) */
+      sessionMaxAge?: number;
+    }
+  | {
+      /** Neon connection string (legacy path — deprecated, kept for backward-compat) */
+      connectionString: string;
+      /** Session TTL in milliseconds (default: 7 days) */
+      sessionMaxAge?: number;
+    };
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
-// Row → Domain mappers
+// Row → Domain mappers (pure transforms, tenant-scoped)
 // ---------------------------------------------------------------------------
 
 type UserRow = typeof schema.users.$inferSelect;
@@ -42,8 +86,9 @@ type BackupRow = typeof schema.backupCodes.$inferSelect;
 type InviteRow = typeof schema.invitations.$inferSelect;
 type AuditRow = typeof schema.auditEvents.$inferSelect;
 
-const toAdminUser = (row: UserRow): AdminUser => ({
+const toAdminUser = (row: UserRow): TenantScoped<AdminUser> => ({
   id: row.id,
+  tenantId: row.tenantId,
   handle: row.handle,
   email: row.email,
   displayName: row.displayName ?? undefined,
@@ -76,8 +121,9 @@ const toAdminUser = (row: UserRow): AdminUser => ({
   updatedAt: row.updatedAt,
 });
 
-const toSession = (row: SessionRow): Session => ({
+const toSession = (row: SessionRow): TenantScoped<Session> => ({
   id: row.id,
+  tenantId: row.tenantId,
   userId: row.userId,
   expires: row.expires,
   expiresAt: row.expiresAt,
@@ -93,7 +139,8 @@ const toSession = (row: SessionRow): Session => ({
   tempTotpExpiresAt: row.tempTotpExpiresAt ?? undefined,
 });
 
-const toTotpSecret = (row: TotpRow): EncryptedTOTPSecret => ({
+const toTotpSecret = (row: TotpRow): TenantScoped<EncryptedTOTPSecret> => ({
+  tenantId: row.tenantId,
   userId: row.userId,
   handle: row.handle,
   encryptedSecret: row.encryptedSecret,
@@ -106,15 +153,17 @@ const toTotpSecret = (row: TotpRow): EncryptedTOTPSecret => ({
   createdAt: row.createdAt,
 });
 
-const toBackupCodeSet = (row: BackupRow): BackupCodeSet => ({
+const toBackupCodeSet = (row: BackupRow): TenantScoped<BackupCodeSet> => ({
+  tenantId: row.tenantId,
   userId: row.userId,
   codes: row.codes,
   generatedAt: row.generatedAt,
   lastUsedAt: row.lastUsedAt ?? undefined,
 });
 
-const toInvitation = (row: InviteRow): AdminInvitation => ({
+const toInvitation = (row: InviteRow): TenantScoped<AdminInvitation> => ({
   id: row.id,
+  tenantId: row.tenantId,
   token: row.token,
   email: row.email,
   role: row.role as AdminInvitation['role'],
@@ -128,8 +177,9 @@ const toInvitation = (row: InviteRow): AdminInvitation => ({
   createdAt: row.createdAt,
 });
 
-const toAuditEvent = (row: AuditRow): AuditEvent => ({
+const toAuditEvent = (row: AuditRow): TenantScoped<AuditEvent> => ({
   id: row.id,
+  tenantId: row.tenantId,
   type: row.type as AuditEvent['type'],
   userId: row.userId ?? undefined,
   targetUserId: row.targetUserId ?? undefined,
@@ -146,13 +196,29 @@ const toAuditEvent = (row: AuditRow): AuditEvent => ({
 // Adapter
 // ---------------------------------------------------------------------------
 
-export class PgStorageAdapter implements IStorageAdapter {
+/**
+ * PgStorageAdapter — driver-agnostic, tenant-scoped.
+ *
+ * NOTE (v0.2.0): this class no longer implements `IStorageAdapter` from
+ * `@tummycrypt/tinyland-auth/storage`. That interface's method signatures
+ * (e.g. `getUser(id)`) are incompatible with Pattern B (`getUser(tenantId, id)`).
+ * A follow-up `@tummycrypt/tinyland-auth@0.3.0` will ship a tenant-aware
+ * interface and this adapter will implement it then.
+ */
+export class PgStorageAdapter {
+  // Narrow to NeonHttpDatabase internally — runtime is compatible across drivers
+  // (see `Database` type comment). This avoids drizzle-orm union-narrowing issues
+  // in the query builder where overload resolution differs between drivers.
   private readonly db: NeonHttpDatabase<typeof schema>;
   private readonly sessionMaxAge: number;
 
   constructor(config: PgStorageConfig) {
-    const client = neon(config.connectionString);
-    this.db = drizzle(client, { schema });
+    if ('db' in config) {
+      this.db = config.db as NeonHttpDatabase<typeof schema>;
+    } else {
+      const client = neon(config.connectionString);
+      this.db = drizzleNeon(client, { schema });
+    }
     this.sessionMaxAge = config.sessionMaxAge ?? SEVEN_DAYS_MS;
   }
 
@@ -167,41 +233,63 @@ export class PgStorageAdapter implements IStorageAdapter {
 
   async close(): Promise<void> {
     // Neon HTTP client is stateless — no connection to close
+    // For injected postgres.js / node-postgres drivers, the caller owns
+    // the connection lifecycle.
   }
 
   // ==========================================================================
   // User Operations
   // ==========================================================================
 
-  async getUser(id: string): Promise<AdminUser | null> {
-    const rows = await this.db.select().from(schema.users).where(eq(schema.users.id, id)).limit(1);
-    return rows[0] ? toAdminUser(rows[0]) : null;
-  }
-
-  async getUserByHandle(handle: string): Promise<AdminUser | null> {
+  async getUser(tenantId: string, id: string): Promise<TenantScoped<AdminUser> | null> {
     const rows = await this.db
       .select()
       .from(schema.users)
-      .where(eq(schema.users.handle, handle.toLowerCase()))
+      .where(and(eq(schema.users.tenantId, tenantId), eq(schema.users.id, id)))
       .limit(1);
     return rows[0] ? toAdminUser(rows[0]) : null;
   }
 
-  async getUserByEmail(email: string): Promise<AdminUser | null> {
+  async getUserByHandle(tenantId: string, handle: string): Promise<TenantScoped<AdminUser> | null> {
     const rows = await this.db
       .select()
       .from(schema.users)
-      .where(eq(schema.users.email, email.toLowerCase()))
+      .where(
+        and(
+          eq(schema.users.tenantId, tenantId),
+          eq(schema.users.handle, handle.toLowerCase()),
+        ),
+      )
       .limit(1);
     return rows[0] ? toAdminUser(rows[0]) : null;
   }
 
-  async getAllUsers(): Promise<AdminUser[]> {
-    const rows = await this.db.select().from(schema.users);
+  async getUserByEmail(tenantId: string, email: string): Promise<TenantScoped<AdminUser> | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.users)
+      .where(
+        and(
+          eq(schema.users.tenantId, tenantId),
+          eq(schema.users.email, email.toLowerCase()),
+        ),
+      )
+      .limit(1);
+    return rows[0] ? toAdminUser(rows[0]) : null;
+  }
+
+  async getAllUsers(tenantId: string): Promise<TenantScoped<AdminUser>[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.tenantId, tenantId));
     return rows.map(toAdminUser);
   }
 
-  async createUser(user: Omit<AdminUser, 'id'>): Promise<AdminUser> {
+  async createUser(
+    tenantId: string,
+    user: Omit<AdminUser, 'id' | 'tenantId'>,
+  ): Promise<TenantScoped<AdminUser>> {
     const id = randomUUID();
     const now = new Date().toISOString();
 
@@ -209,6 +297,7 @@ export class PgStorageAdapter implements IStorageAdapter {
       .insert(schema.users)
       .values({
         id,
+        tenantId,
         handle: user.handle.toLowerCase(),
         email: user.email.toLowerCase(),
         displayName: user.displayName,
@@ -227,8 +316,12 @@ export class PgStorageAdapter implements IStorageAdapter {
     return toAdminUser(rows[0]!);
   }
 
-  async updateUser(id: string, updates: Partial<AdminUser>): Promise<AdminUser> {
-    const existing = await this.getUser(id);
+  async updateUser(
+    tenantId: string,
+    id: string,
+    updates: Partial<AdminUser>,
+  ): Promise<TenantScoped<AdminUser>> {
+    const existing = await this.getUser(tenantId, id);
     if (!existing) throw new Error(`User ${id} not found`);
 
     // Fields that map 1:1 from AdminUser to DB columns
@@ -256,25 +349,31 @@ export class PgStorageAdapter implements IStorageAdapter {
     const rows = await this.db
       .update(schema.users)
       .set(values)
-      .where(eq(schema.users.id, id))
+      .where(and(eq(schema.users.tenantId, tenantId), eq(schema.users.id, id)))
       .returning();
 
     return toAdminUser(rows[0]!);
   }
 
-  async deleteUser(id: string): Promise<boolean> {
-    const user = await this.getUser(id);
+  async deleteUser(tenantId: string, id: string): Promise<boolean> {
+    const user = await this.getUser(tenantId, id);
     if (!user) return false;
 
     // Cascade handles sessions and backup codes via FK
     // Clean up TOTP and invitations manually
-    await this.deleteTOTPSecret(user.handle);
-    await this.db.delete(schema.users).where(eq(schema.users.id, id));
+    await this.deleteTOTPSecret(tenantId, user.handle);
+    await this.db
+      .delete(schema.users)
+      .where(and(eq(schema.users.tenantId, tenantId), eq(schema.users.id, id)));
     return true;
   }
 
-  async hasUsers(): Promise<boolean> {
-    const result = await this.db.select({ n: countFn() }).from(schema.users).limit(1);
+  async hasUsers(tenantId: string): Promise<boolean> {
+    const result = await this.db
+      .select({ n: countFn() })
+      .from(schema.users)
+      .where(eq(schema.users.tenantId, tenantId))
+      .limit(1);
     return (result[0]?.n ?? 0) > 0;
   }
 
@@ -282,49 +381,61 @@ export class PgStorageAdapter implements IStorageAdapter {
   // Session Operations
   // ==========================================================================
 
-  async getSession(id: string): Promise<Session | null> {
+  async getSession(tenantId: string, id: string): Promise<TenantScoped<Session> | null> {
     const rows = await this.db
       .select()
       .from(schema.sessions)
-      .where(eq(schema.sessions.id, id))
+      .where(and(eq(schema.sessions.tenantId, tenantId), eq(schema.sessions.id, id)))
       .limit(1);
 
     if (!rows[0]) return null;
 
     const session = toSession(rows[0]);
     if (new Date(session.expires) < new Date()) {
-      await this.deleteSession(id);
+      await this.deleteSession(tenantId, id);
       return null;
     }
 
     return session;
   }
 
-  async getSessionsByUser(userId: string): Promise<Session[]> {
+  async getSessionsByUser(tenantId: string, userId: string): Promise<TenantScoped<Session>[]> {
     const now = new Date().toISOString();
     const rows = await this.db
       .select()
       .from(schema.sessions)
-      .where(and(eq(schema.sessions.userId, userId), gt(schema.sessions.expires, now)));
+      .where(
+        and(
+          eq(schema.sessions.tenantId, tenantId),
+          eq(schema.sessions.userId, userId),
+          gt(schema.sessions.expires, now),
+        ),
+      );
 
     return rows.map(toSession);
   }
 
-  async getAllSessions(): Promise<Session[]> {
+  async getAllSessions(tenantId: string): Promise<TenantScoped<Session>[]> {
     const now = new Date().toISOString();
     const rows = await this.db
       .select()
       .from(schema.sessions)
-      .where(gt(schema.sessions.expires, now));
+      .where(
+        and(
+          eq(schema.sessions.tenantId, tenantId),
+          gt(schema.sessions.expires, now),
+        ),
+      );
 
     return rows.map(toSession);
   }
 
   async createSession(
+    tenantId: string,
     userId: string,
     user: Partial<AdminUser>,
     metadata?: SessionMetadata,
-  ): Promise<Session> {
+  ): Promise<TenantScoped<Session>> {
     const id = randomUUID();
     const now = new Date();
     const expires = new Date(now.getTime() + this.sessionMaxAge);
@@ -342,6 +453,7 @@ export class PgStorageAdapter implements IStorageAdapter {
       .insert(schema.sessions)
       .values({
         id,
+        tenantId,
         userId,
         expires: expires.toISOString(),
         expiresAt: expires.toISOString(),
@@ -359,8 +471,12 @@ export class PgStorageAdapter implements IStorageAdapter {
     return toSession(rows[0]!);
   }
 
-  async updateSession(id: string, updates: Partial<Session>): Promise<Session> {
-    const existing = await this.getSession(id);
+  async updateSession(
+    tenantId: string,
+    id: string,
+    updates: Partial<Session>,
+  ): Promise<TenantScoped<Session>> {
+    const existing = await this.getSession(tenantId, id);
     if (!existing) throw new Error(`Session ${id} not found`);
 
     const values: Record<string, unknown> = {};
@@ -375,29 +491,41 @@ export class PgStorageAdapter implements IStorageAdapter {
     const rows = await this.db
       .update(schema.sessions)
       .set(values)
-      .where(eq(schema.sessions.id, id))
+      .where(and(eq(schema.sessions.tenantId, tenantId), eq(schema.sessions.id, id)))
       .returning();
 
     return toSession(rows[0]!);
   }
 
-  async deleteSession(id: string): Promise<boolean> {
-    const result = await this.db.delete(schema.sessions).where(eq(schema.sessions.id, id));
+  async deleteSession(tenantId: string, id: string): Promise<boolean> {
+    const result = await this.db
+      .delete(schema.sessions)
+      .where(and(eq(schema.sessions.tenantId, tenantId), eq(schema.sessions.id, id)));
     return (result?.rowCount ?? 0) > 0;
   }
 
-  async deleteUserSessions(userId: string): Promise<number> {
+  async deleteUserSessions(tenantId: string, userId: string): Promise<number> {
     const result = await this.db
       .delete(schema.sessions)
-      .where(eq(schema.sessions.userId, userId));
+      .where(
+        and(
+          eq(schema.sessions.tenantId, tenantId),
+          eq(schema.sessions.userId, userId),
+        ),
+      );
     return result?.rowCount ?? 0;
   }
 
-  async cleanupExpiredSessions(): Promise<number> {
+  async cleanupExpiredSessions(tenantId: string): Promise<number> {
     const now = new Date().toISOString();
     const result = await this.db
       .delete(schema.sessions)
-      .where(lt(schema.sessions.expires, now));
+      .where(
+        and(
+          eq(schema.sessions.tenantId, tenantId),
+          lt(schema.sessions.expires, now),
+        ),
+      );
     return result?.rowCount ?? 0;
   }
 
@@ -405,20 +533,33 @@ export class PgStorageAdapter implements IStorageAdapter {
   // TOTP Operations
   // ==========================================================================
 
-  async getTOTPSecret(handle: string): Promise<EncryptedTOTPSecret | null> {
+  async getTOTPSecret(
+    tenantId: string,
+    handle: string,
+  ): Promise<TenantScoped<EncryptedTOTPSecret> | null> {
     const rows = await this.db
       .select()
       .from(schema.totpSecrets)
-      .where(eq(schema.totpSecrets.handle, handle.toLowerCase()))
+      .where(
+        and(
+          eq(schema.totpSecrets.tenantId, tenantId),
+          eq(schema.totpSecrets.handle, handle.toLowerCase()),
+        ),
+      )
       .limit(1);
 
     return rows[0] ? toTotpSecret(rows[0]) : null;
   }
 
-  async saveTOTPSecret(handle: string, secret: EncryptedTOTPSecret): Promise<void> {
+  async saveTOTPSecret(
+    tenantId: string,
+    handle: string,
+    secret: EncryptedTOTPSecret,
+  ): Promise<void> {
     await this.db
       .insert(schema.totpSecrets)
       .values({
+        tenantId,
         handle: handle.toLowerCase(),
         userId: secret.userId,
         encryptedSecret: secret.encryptedSecret,
@@ -431,7 +572,7 @@ export class PgStorageAdapter implements IStorageAdapter {
         createdAt: secret.createdAt,
       })
       .onConflictDoUpdate({
-        target: schema.totpSecrets.handle,
+        target: [schema.totpSecrets.tenantId, schema.totpSecrets.handle],
         set: {
           encryptedSecret: secret.encryptedSecret,
           iv: secret.iv,
@@ -444,10 +585,15 @@ export class PgStorageAdapter implements IStorageAdapter {
       });
   }
 
-  async deleteTOTPSecret(handle: string): Promise<boolean> {
+  async deleteTOTPSecret(tenantId: string, handle: string): Promise<boolean> {
     const result = await this.db
       .delete(schema.totpSecrets)
-      .where(eq(schema.totpSecrets.handle, handle.toLowerCase()));
+      .where(
+        and(
+          eq(schema.totpSecrets.tenantId, tenantId),
+          eq(schema.totpSecrets.handle, handle.toLowerCase()),
+        ),
+      );
     return (result?.rowCount ?? 0) > 0;
   }
 
@@ -455,27 +601,40 @@ export class PgStorageAdapter implements IStorageAdapter {
   // Backup Code Operations
   // ==========================================================================
 
-  async getBackupCodes(userId: string): Promise<BackupCodeSet | null> {
+  async getBackupCodes(
+    tenantId: string,
+    userId: string,
+  ): Promise<TenantScoped<BackupCodeSet> | null> {
     const rows = await this.db
       .select()
       .from(schema.backupCodes)
-      .where(eq(schema.backupCodes.userId, userId))
+      .where(
+        and(
+          eq(schema.backupCodes.tenantId, tenantId),
+          eq(schema.backupCodes.userId, userId),
+        ),
+      )
       .limit(1);
 
     return rows[0] ? toBackupCodeSet(rows[0]) : null;
   }
 
-  async saveBackupCodes(userId: string, codes: BackupCodeSet): Promise<void> {
+  async saveBackupCodes(
+    tenantId: string,
+    userId: string,
+    codes: BackupCodeSet,
+  ): Promise<void> {
     await this.db
       .insert(schema.backupCodes)
       .values({
+        tenantId,
         userId,
         codes: codes.codes,
         generatedAt: codes.generatedAt,
         lastUsedAt: codes.lastUsedAt,
       })
       .onConflictDoUpdate({
-        target: schema.backupCodes.userId,
+        target: [schema.backupCodes.tenantId, schema.backupCodes.userId],
         set: {
           codes: codes.codes,
           generatedAt: codes.generatedAt,
@@ -484,10 +643,15 @@ export class PgStorageAdapter implements IStorageAdapter {
       });
   }
 
-  async deleteBackupCodes(userId: string): Promise<boolean> {
+  async deleteBackupCodes(tenantId: string, userId: string): Promise<boolean> {
     const result = await this.db
       .delete(schema.backupCodes)
-      .where(eq(schema.backupCodes.userId, userId));
+      .where(
+        and(
+          eq(schema.backupCodes.tenantId, tenantId),
+          eq(schema.backupCodes.userId, userId),
+        ),
+      );
     return (result?.rowCount ?? 0) > 0;
   }
 
@@ -495,11 +659,19 @@ export class PgStorageAdapter implements IStorageAdapter {
   // Invitation Operations
   // ==========================================================================
 
-  async getInvitation(token: string): Promise<AdminInvitation | null> {
+  async getInvitation(
+    tenantId: string,
+    token: string,
+  ): Promise<TenantScoped<AdminInvitation> | null> {
     const rows = await this.db
       .select()
       .from(schema.invitations)
-      .where(eq(schema.invitations.token, token))
+      .where(
+        and(
+          eq(schema.invitations.tenantId, tenantId),
+          eq(schema.invitations.token, token),
+        ),
+      )
       .limit(1);
 
     if (!rows[0]) return null;
@@ -508,28 +680,40 @@ export class PgStorageAdapter implements IStorageAdapter {
     return invite;
   }
 
-  async getInvitationById(id: string): Promise<AdminInvitation | null> {
+  async getInvitationById(
+    tenantId: string,
+    id: string,
+  ): Promise<TenantScoped<AdminInvitation> | null> {
     const rows = await this.db
       .select()
       .from(schema.invitations)
-      .where(eq(schema.invitations.id, id))
+      .where(
+        and(
+          eq(schema.invitations.tenantId, tenantId),
+          eq(schema.invitations.id, id),
+        ),
+      )
       .limit(1);
 
     return rows[0] ? toInvitation(rows[0]) : null;
   }
 
-  async getAllInvitations(): Promise<AdminInvitation[]> {
-    const rows = await this.db.select().from(schema.invitations);
+  async getAllInvitations(tenantId: string): Promise<TenantScoped<AdminInvitation>[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.invitations)
+      .where(eq(schema.invitations.tenantId, tenantId));
     return rows.map(toInvitation);
   }
 
-  async getPendingInvitations(): Promise<AdminInvitation[]> {
+  async getPendingInvitations(tenantId: string): Promise<TenantScoped<AdminInvitation>[]> {
     const now = new Date().toISOString();
     const rows = await this.db
       .select()
       .from(schema.invitations)
       .where(
         and(
+          eq(schema.invitations.tenantId, tenantId),
           eq(schema.invitations.isActive, true),
           gt(schema.invitations.expiresAt, now),
           sql`${schema.invitations.usedAt} IS NULL`,
@@ -540,14 +724,16 @@ export class PgStorageAdapter implements IStorageAdapter {
   }
 
   async createInvitation(
+    tenantId: string,
     invitation: Omit<AdminInvitation, 'id'>,
-  ): Promise<AdminInvitation> {
+  ): Promise<TenantScoped<AdminInvitation>> {
     const id = randomUUID();
 
     const rows = await this.db
       .insert(schema.invitations)
       .values({
         id,
+        tenantId,
         token: invitation.token,
         email: invitation.email,
         role: invitation.role,
@@ -566,10 +752,11 @@ export class PgStorageAdapter implements IStorageAdapter {
   }
 
   async updateInvitation(
+    tenantId: string,
     token: string,
     updates: Partial<AdminInvitation>,
-  ): Promise<AdminInvitation> {
-    const existing = await this.getInvitation(token);
+  ): Promise<TenantScoped<AdminInvitation>> {
+    const existing = await this.getInvitation(tenantId, token);
     if (!existing) throw new Error('Invitation not found');
 
     const values: Record<string, unknown> = {};
@@ -581,24 +768,39 @@ export class PgStorageAdapter implements IStorageAdapter {
     const rows = await this.db
       .update(schema.invitations)
       .set(values)
-      .where(eq(schema.invitations.token, token))
+      .where(
+        and(
+          eq(schema.invitations.tenantId, tenantId),
+          eq(schema.invitations.token, token),
+        ),
+      )
       .returning();
 
     return toInvitation(rows[0]!);
   }
 
-  async deleteInvitation(token: string): Promise<boolean> {
+  async deleteInvitation(tenantId: string, token: string): Promise<boolean> {
     const result = await this.db
       .delete(schema.invitations)
-      .where(eq(schema.invitations.token, token));
+      .where(
+        and(
+          eq(schema.invitations.tenantId, tenantId),
+          eq(schema.invitations.token, token),
+        ),
+      );
     return (result?.rowCount ?? 0) > 0;
   }
 
-  async cleanupExpiredInvitations(): Promise<number> {
+  async cleanupExpiredInvitations(tenantId: string): Promise<number> {
     const now = new Date().toISOString();
     const result = await this.db
       .delete(schema.invitations)
-      .where(lt(schema.invitations.expiresAt, now));
+      .where(
+        and(
+          eq(schema.invitations.tenantId, tenantId),
+          lt(schema.invitations.expiresAt, now),
+        ),
+      );
     return result?.rowCount ?? 0;
   }
 
@@ -606,13 +808,17 @@ export class PgStorageAdapter implements IStorageAdapter {
   // Audit Operations
   // ==========================================================================
 
-  async logAuditEvent(event: Omit<AuditEvent, 'id'>): Promise<AuditEvent> {
+  async logAuditEvent(
+    tenantId: string,
+    event: Omit<AuditEvent, 'id'>,
+  ): Promise<TenantScoped<AuditEvent>> {
     const id = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
     const rows = await this.db
       .insert(schema.auditEvents)
       .values({
         id,
+        tenantId,
         type: event.type as string,
         userId: event.userId,
         targetUserId: event.targetUserId,
@@ -629,8 +835,11 @@ export class PgStorageAdapter implements IStorageAdapter {
     return toAuditEvent(rows[0]!);
   }
 
-  async getAuditEvents(filters: AuditEventFilters): Promise<AuditEvent[]> {
-    const conditions = [];
+  async getAuditEvents(
+    tenantId: string,
+    filters: AuditEventFilters,
+  ): Promise<TenantScoped<AuditEvent>[]> {
+    const conditions = [eq(schema.auditEvents.tenantId, tenantId)];
 
     if (filters.startDate) {
       conditions.push(gt(schema.auditEvents.timestamp, filters.startDate.toISOString()));
@@ -651,7 +860,7 @@ export class PgStorageAdapter implements IStorageAdapter {
     let query = this.db
       .select()
       .from(schema.auditEvents)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .where(and(...conditions))
       .orderBy(desc(schema.auditEvents.timestamp));
 
     if (filters.offset) {
@@ -665,10 +874,11 @@ export class PgStorageAdapter implements IStorageAdapter {
     return rows.map(toAuditEvent);
   }
 
-  async getRecentAuditEvents(limit = 100): Promise<AuditEvent[]> {
+  async getRecentAuditEvents(tenantId: string, limit = 100): Promise<TenantScoped<AuditEvent>[]> {
     const rows = await this.db
       .select()
       .from(schema.auditEvents)
+      .where(eq(schema.auditEvents.tenantId, tenantId))
       .orderBy(desc(schema.auditEvents.timestamp))
       .limit(limit);
 
@@ -677,7 +887,17 @@ export class PgStorageAdapter implements IStorageAdapter {
 }
 
 /**
- * Factory function for creating a PgStorageAdapter
+ * Factory function for creating a PgStorageAdapter.
+ *
+ * @example
+ *   // With a pre-built drizzle client (postgres.js, node-postgres, neon-http)
+ *   const sql = postgres(process.env.DATABASE_URL!, { prepare: false });
+ *   const db = drizzle(sql, { schema });
+ *   const adapter = createPgStorageAdapter({ db });
+ *
+ * @example
+ *   // Legacy neon-http path (kept for backward-compat)
+ *   const adapter = createPgStorageAdapter({ connectionString });
  */
 export const createPgStorageAdapter = (config: PgStorageConfig): PgStorageAdapter =>
   new PgStorageAdapter(config);

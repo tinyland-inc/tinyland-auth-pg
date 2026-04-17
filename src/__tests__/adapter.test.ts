@@ -316,3 +316,32 @@ describe('Package exports', () => {
 		expect(Object.keys(schema).length).toBeGreaterThan(0);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Driver injection (v0.2.0) — factory accepts pre-built drizzle client
+// ---------------------------------------------------------------------------
+
+describe('driver injection', () => {
+	it('accepts a pre-built drizzle client via { db }', async () => {
+		const { drizzle: drizzlePgJs } = await import('drizzle-orm/postgres-js');
+		const schema = await import('../schema.js');
+		const { createPgStorageAdapter, PgStorageAdapter } = await import('../adapter.js');
+
+		// Mock postgres.js shape sufficient for Drizzle's client wrapper.
+		// drizzle postgres-js driver reads `sql.options.parsers` at construction,
+		// so the mock must expose a minimally-shaped `options` object.
+		const mockSql: any = () => [];
+		mockSql.unsafe = () => Promise.resolve([]);
+		mockSql.options = { parsers: {}, serializers: {} };
+		const db = drizzlePgJs(mockSql, { schema });
+
+		const adapter = createPgStorageAdapter({ db });
+		expect(adapter).toBeInstanceOf(PgStorageAdapter);
+	});
+
+	it('still accepts connectionString (backward compat)', async () => {
+		const { createPgStorageAdapter, PgStorageAdapter } = await import('../adapter.js');
+		const adapter = createPgStorageAdapter({ connectionString: 'postgresql://u:p@h/d' });
+		expect(adapter).toBeInstanceOf(PgStorageAdapter);
+	});
+});
