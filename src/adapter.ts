@@ -369,9 +369,19 @@ export class PgStorageAdapter {
     const user = await this.getUser(tenantId, id);
     if (!user) return false;
 
-    // Cascade handles sessions and backup codes via FK
-    // Clean up TOTP and invitations manually
+    // sessions.user_id and backup_codes.user_id cascade via FK ON DELETE CASCADE.
+    // totp_secrets has no FK to users; invitations.created_by uses ON DELETE
+    // NO ACTION. Both must be cleaned up manually before the user row is
+    // removed, or the final DELETE throws a foreign key violation.
     await this.deleteTOTPSecret(tenantId, user.handle);
+    await this.db
+      .delete(schema.invitations)
+      .where(
+        and(
+          eq(schema.invitations.tenantId, tenantId),
+          eq(schema.invitations.createdBy, id),
+        ),
+      );
     await this.db
       .delete(schema.users)
       .where(and(eq(schema.users.tenantId, tenantId), eq(schema.users.id, id)));
@@ -508,35 +518,43 @@ export class PgStorageAdapter {
   }
 
   async deleteSession(tenantId: string, id: string): Promise<boolean> {
-    const result = await this.db
+    // Use `.returning()` length instead of `result.rowCount` so the count works
+    // across every supported driver. `rowCount` is a neon-http/node-postgres
+    // thing; `postgres.js` exposes `.count` and PgBouncer transaction-mode can
+    // strip the exec metadata entirely. `.returning()` gives us a driver-
+    // agnostic array of affected rows.
+    const deleted = await this.db
       .delete(schema.sessions)
-      .where(and(eq(schema.sessions.tenantId, tenantId), eq(schema.sessions.id, id)));
-    return (result?.rowCount ?? 0) > 0;
+      .where(and(eq(schema.sessions.tenantId, tenantId), eq(schema.sessions.id, id)))
+      .returning({ id: schema.sessions.id });
+    return deleted.length > 0;
   }
 
   async deleteUserSessions(tenantId: string, userId: string): Promise<number> {
-    const result = await this.db
+    const deleted = await this.db
       .delete(schema.sessions)
       .where(
         and(
           eq(schema.sessions.tenantId, tenantId),
           eq(schema.sessions.userId, userId),
         ),
-      );
-    return result?.rowCount ?? 0;
+      )
+      .returning({ id: schema.sessions.id });
+    return deleted.length;
   }
 
   async cleanupExpiredSessions(tenantId: string): Promise<number> {
     const now = new Date().toISOString();
-    const result = await this.db
+    const deleted = await this.db
       .delete(schema.sessions)
       .where(
         and(
           eq(schema.sessions.tenantId, tenantId),
           lt(schema.sessions.expires, now),
         ),
-      );
-    return result?.rowCount ?? 0;
+      )
+      .returning({ id: schema.sessions.id });
+    return deleted.length;
   }
 
   // ==========================================================================
@@ -596,15 +614,16 @@ export class PgStorageAdapter {
   }
 
   async deleteTOTPSecret(tenantId: string, handle: string): Promise<boolean> {
-    const result = await this.db
+    const deleted = await this.db
       .delete(schema.totpSecrets)
       .where(
         and(
           eq(schema.totpSecrets.tenantId, tenantId),
           eq(schema.totpSecrets.handle, handle.toLowerCase()),
         ),
-      );
-    return (result?.rowCount ?? 0) > 0;
+      )
+      .returning({ handle: schema.totpSecrets.handle });
+    return deleted.length > 0;
   }
 
   // ==========================================================================
@@ -654,15 +673,16 @@ export class PgStorageAdapter {
   }
 
   async deleteBackupCodes(tenantId: string, userId: string): Promise<boolean> {
-    const result = await this.db
+    const deleted = await this.db
       .delete(schema.backupCodes)
       .where(
         and(
           eq(schema.backupCodes.tenantId, tenantId),
           eq(schema.backupCodes.userId, userId),
         ),
-      );
-    return (result?.rowCount ?? 0) > 0;
+      )
+      .returning({ userId: schema.backupCodes.userId });
+    return deleted.length > 0;
   }
 
   // ==========================================================================
@@ -790,28 +810,30 @@ export class PgStorageAdapter {
   }
 
   async deleteInvitation(tenantId: string, token: string): Promise<boolean> {
-    const result = await this.db
+    const deleted = await this.db
       .delete(schema.invitations)
       .where(
         and(
           eq(schema.invitations.tenantId, tenantId),
           eq(schema.invitations.token, token),
         ),
-      );
-    return (result?.rowCount ?? 0) > 0;
+      )
+      .returning({ id: schema.invitations.id });
+    return deleted.length > 0;
   }
 
   async cleanupExpiredInvitations(tenantId: string): Promise<number> {
     const now = new Date().toISOString();
-    const result = await this.db
+    const deleted = await this.db
       .delete(schema.invitations)
       .where(
         and(
           eq(schema.invitations.tenantId, tenantId),
           lt(schema.invitations.expiresAt, now),
         ),
-      );
-    return result?.rowCount ?? 0;
+      )
+      .returning({ id: schema.invitations.id });
+    return deleted.length;
   }
 
   // ==========================================================================

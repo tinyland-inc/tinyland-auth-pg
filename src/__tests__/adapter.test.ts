@@ -68,8 +68,9 @@ const sessionRow = {
 	tempTotpExpiresAt: null,
 };
 
+// totp_secrets has a composite PK of (tenantId, handle) — there is no `id`
+// column on the real row. Keep this fixture aligned with the schema.
 const totpRow = {
-	id: 'totp-1',
 	tenantId: TEST_TENANT_ID,
 	userId: '550e8400-e29b-41d4-a716-446655440000',
 	handle: 'jess',
