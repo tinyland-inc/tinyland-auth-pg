@@ -65,11 +65,11 @@ export const users = authSchema.table(
     createdAt: timestamp('created_at', { mode: 'string' }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { mode: 'string' }).notNull().defaultNow(),
   },
-  (t) => ({
-    tenantHandleUnique: uniqueIndex('users_tenant_handle_unique').on(t.tenantId, t.handle),
-    tenantEmailUnique: uniqueIndex('users_tenant_email_unique').on(t.tenantId, t.email),
-    tenantIdx: index('users_tenant_idx').on(t.tenantId),
-  }),
+  (t) => [
+    uniqueIndex('users_tenant_handle_unique').on(t.tenantId, t.handle),
+    uniqueIndex('users_tenant_email_unique').on(t.tenantId, t.email),
+    index('users_tenant_idx').on(t.tenantId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -102,9 +102,9 @@ export const sessions = authSchema.table(
     tempTotpSecret: text('temp_totp_secret'),
     tempTotpExpiresAt: timestamp('temp_totp_expires_at', { mode: 'string' }),
   },
-  (t) => ({
-    tenantIdx: index('sessions_tenant_idx').on(t.tenantId),
-  }),
+  (t) => [
+    index('sessions_tenant_idx').on(t.tenantId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -128,10 +128,10 @@ export const totpSecrets = authSchema.table(
     lastUsedAt: timestamp('last_used_at', { mode: 'string' }),
     createdAt: timestamp('created_at', { mode: 'string' }).notNull().defaultNow(),
   },
-  (t) => ({
-    pk: primaryKey({ columns: [t.tenantId, t.handle] }),
-    tenantIdx: index('totp_secrets_tenant_idx').on(t.tenantId),
-  }),
+  (t) => [
+    primaryKey({ columns: [t.tenantId, t.handle] }),
+    index('totp_secrets_tenant_idx').on(t.tenantId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -154,10 +154,10 @@ export const backupCodes = authSchema.table(
     generatedAt: timestamp('generated_at', { mode: 'string' }).notNull().defaultNow(),
     lastUsedAt: timestamp('last_used_at', { mode: 'string' }),
   },
-  (t) => ({
-    pk: primaryKey({ columns: [t.tenantId, t.userId] }),
-    tenantIdx: index('backup_codes_tenant_idx').on(t.tenantId),
-  }),
+  (t) => [
+    primaryKey({ columns: [t.tenantId, t.userId] }),
+    index('backup_codes_tenant_idx').on(t.tenantId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -186,10 +186,10 @@ export const invitations = authSchema.table(
     }>(),
     createdAt: timestamp('created_at', { mode: 'string' }).notNull().defaultNow(),
   },
-  (t) => ({
-    tenantTokenUnique: uniqueIndex('invitations_tenant_token_unique').on(t.tenantId, t.token),
-    tenantIdx: index('invitations_tenant_idx').on(t.tenantId),
-  }),
+  (t) => [
+    uniqueIndex('invitations_tenant_token_unique').on(t.tenantId, t.token),
+    index('invitations_tenant_idx').on(t.tenantId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -212,7 +212,7 @@ export const auditEvents = authSchema.table(
     source: varchar('source', { length: 16 }).notNull().default('system'),
     timestamp: timestamp('timestamp', { mode: 'string' }).notNull().defaultNow(),
   },
-  (t) => ({
-    tenantIdx: index('audit_events_tenant_idx').on(t.tenantId),
-  }),
+  (t) => [
+    index('audit_events_tenant_idx').on(t.tenantId),
+  ],
 );

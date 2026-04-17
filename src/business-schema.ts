@@ -44,13 +44,13 @@ export const appointments = pgTable(
     notes: text('notes'),
     createdAt: timestamp('created_at', { mode: 'string' }).notNull().defaultNow(),
   },
-  (t) => ({
-    tenantAcuityIdUnique: uniqueIndex('appointments_tenant_acuity_id_unique').on(
+  (t) => [
+    uniqueIndex('appointments_tenant_acuity_id_unique').on(
       t.tenantId,
       t.acuityId,
     ),
-    tenantIdx: index('appointments_tenant_idx').on(t.tenantId),
-  }),
+    index('appointments_tenant_idx').on(t.tenantId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -71,9 +71,9 @@ export const payments = pgTable(
     metadata: jsonb('metadata').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { mode: 'string' }).notNull().defaultNow(),
   },
-  (t) => ({
-    tenantIdx: index('payments_tenant_idx').on(t.tenantId),
-  }),
+  (t) => [
+    index('payments_tenant_idx').on(t.tenantId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@ export const localBookings = pgTable(
     createdAt: timestamp('created_at', { mode: 'string' }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { mode: 'string' }).notNull().defaultNow(),
   },
-  (t) => ({
-    tenantIdx: index('local_bookings_tenant_idx').on(t.tenantId),
-  }),
+  (t) => [
+    index('local_bookings_tenant_idx').on(t.tenantId),
+  ],
 );

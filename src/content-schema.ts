@@ -53,9 +53,9 @@ export const businessProfile = pgTable(
     googleMapsUrl: text('google_maps_url'),
     updatedAt: timestamp('updated_at', { mode: 'string' }).notNull().defaultNow(),
   },
-  (t) => ({
-    tenantIdx: index('business_profile_tenant_idx').on(t.tenantId),
-  }),
+  (t) => [
+    index('business_profile_tenant_idx').on(t.tenantId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -78,13 +78,13 @@ export const services = pgTable(
     displayOrder: integer('display_order').notNull().default(0),
     updatedAt: timestamp('updated_at', { mode: 'string' }).notNull().defaultNow(),
   },
-  (t) => ({
-    tenantAcuityIdUnique: uniqueIndex('services_tenant_acuity_id_unique').on(
+  (t) => [
+    uniqueIndex('services_tenant_acuity_id_unique').on(
       t.tenantId,
       t.acuityId,
     ),
-    tenantIdx: index('services_tenant_idx').on(t.tenantId),
-  }),
+    index('services_tenant_idx').on(t.tenantId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -102,9 +102,9 @@ export const businessHours = pgTable(
     label: varchar('label', { length: 64 }),
     updatedAt: timestamp('updated_at', { mode: 'string' }).notNull().defaultNow(),
   },
-  (t) => ({
-    tenantIdx: index('business_hours_tenant_idx').on(t.tenantId),
-  }),
+  (t) => [
+    index('business_hours_tenant_idx').on(t.tenantId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -125,9 +125,9 @@ export const reviews = pgTable(
     publishedAt: timestamp('published_at', { mode: 'string' }),
     updatedAt: timestamp('updated_at', { mode: 'string' }).notNull().defaultNow(),
   },
-  (t) => ({
-    tenantIdx: index('reviews_tenant_idx').on(t.tenantId),
-  }),
+  (t) => [
+    index('reviews_tenant_idx').on(t.tenantId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -149,11 +149,11 @@ export const practitioners = pgTable(
     photoUrl: varchar('photo_url', { length: 512 }),
     updatedAt: timestamp('updated_at', { mode: 'string' }).notNull().defaultNow(),
   },
-  (t) => ({
-    tenantHandleUnique: uniqueIndex('practitioners_tenant_handle_unique').on(
+  (t) => [
+    uniqueIndex('practitioners_tenant_handle_unique').on(
       t.tenantId,
       t.handle,
     ),
-    tenantIdx: index('practitioners_tenant_idx').on(t.tenantId),
-  }),
+    index('practitioners_tenant_idx').on(t.tenantId),
+  ],
 );
