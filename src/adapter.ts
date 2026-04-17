@@ -214,8 +214,18 @@ export class PgStorageAdapter {
 
   constructor(config: PgStorageConfig) {
     if ('db' in config) {
+      if (!config.db) {
+        throw new Error(
+          'PgStorageAdapter: `db` is required when using driver injection',
+        );
+      }
       this.db = config.db as NeonHttpDatabase<typeof schema>;
     } else {
+      if (!config.connectionString) {
+        throw new Error(
+          'PgStorageAdapter: `connectionString` is required for the legacy neon-http path',
+        );
+      }
       const client = neon(config.connectionString);
       this.db = drizzleNeon(client, { schema });
     }

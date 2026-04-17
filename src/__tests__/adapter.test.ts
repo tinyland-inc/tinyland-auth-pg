@@ -229,6 +229,20 @@ describe('createPgStorageAdapter', () => {
 		// neon() throws on empty/invalid connection string
 		expect(() => createPgStorageAdapter({ connectionString: '' })).toThrow();
 	});
+
+	it('throws with falsy db in driver-injection mode', async () => {
+		const { createPgStorageAdapter } = await import('../index.js');
+		// Mirrors the connectionString validation — a nullish `db` must fail loudly
+		// at construction rather than silently defer to first query
+		expect(() =>
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			createPgStorageAdapter({ db: null as any }),
+		).toThrow(/`db` is required/);
+		expect(() =>
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			createPgStorageAdapter({ db: undefined as any }),
+		).toThrow(/`db` is required/);
+	});
 });
 
 // ---------------------------------------------------------------------------
