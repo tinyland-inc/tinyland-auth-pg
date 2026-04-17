@@ -6,7 +6,7 @@
  */
 
 export { PgStorageAdapter, createPgStorageAdapter } from './adapter.js';
-export type { PgStorageConfig } from './adapter.js';
+export type { PgStorageConfig, Database, TenantScoped } from './adapter.js';
 export * as schema from './schema.js';
 export * as businessSchema from './business-schema.js';
 export * as contentSchema from './content-schema.js';

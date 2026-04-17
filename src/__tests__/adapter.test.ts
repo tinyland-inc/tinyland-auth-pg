@@ -5,7 +5,11 @@
  * call the right Drizzle operations with correct arguments.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
+
+// Fixed tenant UUID used across all fixture rows and adapter call sites so
+// tests exercise the Pattern B contract (every method accepts tenantId first).
+const TEST_TENANT_ID = '11111111-1111-1111-1111-111111111111';
 
 // ---------------------------------------------------------------------------
 // Row fixtures (match Drizzle $inferSelect types from schema.ts)
@@ -13,6 +17,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const userRow = {
 	id: '550e8400-e29b-41d4-a716-446655440000',
+	tenantId: TEST_TENANT_ID,
 	handle: 'jen',
 	email: 'jen@example.com',
 	displayName: 'Jen',
@@ -47,6 +52,7 @@ const userRow = {
 
 const sessionRow = {
 	id: '660e8400-e29b-41d4-a716-446655440001',
+	tenantId: TEST_TENANT_ID,
 	userId: '550e8400-e29b-41d4-a716-446655440000',
 	expires: '2026-03-29T10:00:00Z',
 	expiresAt: '2026-03-29T10:00:00Z',
@@ -62,8 +68,10 @@ const sessionRow = {
 	tempTotpExpiresAt: null,
 };
 
+// totp_secrets has a composite PK of (tenantId, handle) — there is no `id`
+// column on the real row. Keep this fixture aligned with the schema.
 const totpRow = {
-	id: 'totp-1',
+	tenantId: TEST_TENANT_ID,
 	userId: '550e8400-e29b-41d4-a716-446655440000',
 	handle: 'jess',
 	encryptedSecret: 'encrypted-data',
@@ -76,31 +84,9 @@ const totpRow = {
 	createdAt: '2026-03-01T00:00:00Z',
 };
 
-const backupRow = {
-	id: 'backup-1',
-	userId: '550e8400-e29b-41d4-a716-446655440000',
-	codes: [{ hash: '$2b$10$abc', used: false }],
-	generatedAt: '2026-03-01T00:00:00Z',
-	lastUsedAt: null,
-};
-
-const invitationRow = {
-	id: 'inv-1',
-	token: 'invite-token-123',
-	email: 'new@example.com',
-	role: 'viewer',
-	createdBy: 'jen',
-	isActive: true,
-	expiresAt: '2026-04-01T00:00:00Z',
-	usedAt: null,
-	usedBy: null,
-	temporaryTotpSecret: null,
-	metadata: null,
-	createdAt: '2026-03-22T00:00:00Z',
-};
-
 const auditRow = {
 	id: 'evt_123_abc',
+	tenantId: TEST_TENANT_ID,
 	type: 'login_success',
 	userId: '550e8400-e29b-41d4-a716-446655440000',
 	targetUserId: null,
@@ -135,6 +121,10 @@ describe('Row Mappers', () => {
 		it('handle is lowercase', () => {
 			expect(userRow.handle).toBe(userRow.handle.toLowerCase());
 		});
+
+		it('carries tenantId (Pattern B)', () => {
+			expect(userRow.tenantId).toBe(TEST_TENANT_ID);
+		});
 	});
 
 	describe('Session row shape', () => {
@@ -150,6 +140,10 @@ describe('Row Mappers', () => {
 			expect(sessionRow.user).toHaveProperty('username');
 			expect(sessionRow.user).toHaveProperty('role');
 		});
+
+		it('carries tenantId (Pattern B)', () => {
+			expect(sessionRow.tenantId).toBe(TEST_TENANT_ID);
+		});
 	});
 
 	describe('TOTP row shape', () => {
@@ -159,6 +153,10 @@ describe('Row Mappers', () => {
 			expect(totpRow).toHaveProperty('authTag');
 			expect(totpRow).toHaveProperty('salt');
 		});
+
+		it('carries tenantId (Pattern B)', () => {
+			expect(totpRow.tenantId).toBe(TEST_TENANT_ID);
+		});
 	});
 
 	describe('Audit event row shape', () => {
@@ -167,6 +165,10 @@ describe('Row Mappers', () => {
 			expect(auditRow).toHaveProperty('severity');
 			expect(auditRow).toHaveProperty('source');
 			expect(auditRow).toHaveProperty('timestamp');
+		});
+
+		it('carries tenantId (Pattern B)', () => {
+			expect(auditRow.tenantId).toBe(TEST_TENANT_ID);
 		});
 	});
 });
@@ -228,6 +230,20 @@ describe('createPgStorageAdapter', () => {
 		// neon() throws on empty/invalid connection string
 		expect(() => createPgStorageAdapter({ connectionString: '' })).toThrow();
 	});
+
+	it('throws with falsy db in driver-injection mode', async () => {
+		const { createPgStorageAdapter } = await import('../index.js');
+		// Mirrors the connectionString validation — a nullish `db` must fail loudly
+		// at construction rather than silently defer to first query
+		expect(() =>
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			createPgStorageAdapter({ db: null as any }),
+		).toThrow(/`db` is required/);
+		expect(() =>
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			createPgStorageAdapter({ db: undefined as any }),
+		).toThrow(/`db` is required/);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -235,7 +251,7 @@ describe('createPgStorageAdapter', () => {
 // ---------------------------------------------------------------------------
 
 describe('PgStorageAdapter interface', () => {
-	it('implements all IStorageAdapter methods', async () => {
+	it('exposes all expected storage adapter methods', async () => {
 		const { PgStorageAdapter } = await import('../adapter.js');
 
 		// Verify all expected methods exist on the prototype
@@ -314,5 +330,34 @@ describe('Package exports', () => {
 	it('booking-schema exports tables', async () => {
 		const schema = await import('../booking-schema.js');
 		expect(Object.keys(schema).length).toBeGreaterThan(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Driver injection (v0.2.0) — factory accepts pre-built drizzle client
+// ---------------------------------------------------------------------------
+
+describe('driver injection', () => {
+	it('accepts a pre-built drizzle client via { db }', async () => {
+		const { drizzle: drizzlePgJs } = await import('drizzle-orm/postgres-js');
+		const schema = await import('../schema.js');
+		const { createPgStorageAdapter, PgStorageAdapter } = await import('../adapter.js');
+
+		// Mock postgres.js shape sufficient for Drizzle's client wrapper.
+		// drizzle postgres-js driver reads `sql.options.parsers` at construction,
+		// so the mock must expose a minimally-shaped `options` object.
+		const mockSql: any = () => [];
+		mockSql.unsafe = () => Promise.resolve([]);
+		mockSql.options = { parsers: {}, serializers: {} };
+		const db = drizzlePgJs(mockSql, { schema });
+
+		const adapter = createPgStorageAdapter({ db });
+		expect(adapter).toBeInstanceOf(PgStorageAdapter);
+	});
+
+	it('still accepts connectionString (backward compat)', async () => {
+		const { createPgStorageAdapter, PgStorageAdapter } = await import('../adapter.js');
+		const adapter = createPgStorageAdapter({ connectionString: 'postgresql://u:p@h/d' });
+		expect(adapter).toBeInstanceOf(PgStorageAdapter);
 	});
 });
