@@ -16,7 +16,7 @@
         };
         packages.default = pkgs.buildNpmPackage {
           pname = "tinyland-auth-pg";
-          version = "0.1.0";
+          version = "0.2.0";
           src = ./.;
           npmDepsHash = "";  # Run nix build first to get hash
           nodejs = nodejs;

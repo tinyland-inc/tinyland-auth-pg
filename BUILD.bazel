@@ -17,6 +17,6 @@ npm_package(
     name = "pkg",
     srcs = [":tinyland-auth-pg", "package.json"],
     package = "@tummycrypt/tinyland-auth-pg",
-    version = "0.1.0",
+    version = "0.2.0",
     visibility = ["//visibility:public"],
 )
