@@ -7,12 +7,17 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Fixed tenant UUID used across all fixture rows and adapter call sites so
+// tests exercise the Pattern B contract (every method accepts tenantId first).
+const TEST_TENANT_ID = '11111111-1111-1111-1111-111111111111';
+
 // ---------------------------------------------------------------------------
 // Row fixtures (match Drizzle $inferSelect types from schema.ts)
 // ---------------------------------------------------------------------------
 
 const userRow = {
 	id: '550e8400-e29b-41d4-a716-446655440000',
+	tenantId: TEST_TENANT_ID,
 	handle: 'jen',
 	email: 'jen@example.com',
 	displayName: 'Jen',
@@ -47,6 +52,7 @@ const userRow = {
 
 const sessionRow = {
 	id: '660e8400-e29b-41d4-a716-446655440001',
+	tenantId: TEST_TENANT_ID,
 	userId: '550e8400-e29b-41d4-a716-446655440000',
 	expires: '2026-03-29T10:00:00Z',
 	expiresAt: '2026-03-29T10:00:00Z',
@@ -64,6 +70,7 @@ const sessionRow = {
 
 const totpRow = {
 	id: 'totp-1',
+	tenantId: TEST_TENANT_ID,
 	userId: '550e8400-e29b-41d4-a716-446655440000',
 	handle: 'jess',
 	encryptedSecret: 'encrypted-data',
@@ -78,6 +85,7 @@ const totpRow = {
 
 const backupRow = {
 	id: 'backup-1',
+	tenantId: TEST_TENANT_ID,
 	userId: '550e8400-e29b-41d4-a716-446655440000',
 	codes: [{ hash: '$2b$10$abc', used: false }],
 	generatedAt: '2026-03-01T00:00:00Z',
@@ -86,6 +94,7 @@ const backupRow = {
 
 const invitationRow = {
 	id: 'inv-1',
+	tenantId: TEST_TENANT_ID,
 	token: 'invite-token-123',
 	email: 'new@example.com',
 	role: 'viewer',
@@ -101,6 +110,7 @@ const invitationRow = {
 
 const auditRow = {
 	id: 'evt_123_abc',
+	tenantId: TEST_TENANT_ID,
 	type: 'login_success',
 	userId: '550e8400-e29b-41d4-a716-446655440000',
 	targetUserId: null,
@@ -135,6 +145,10 @@ describe('Row Mappers', () => {
 		it('handle is lowercase', () => {
 			expect(userRow.handle).toBe(userRow.handle.toLowerCase());
 		});
+
+		it('carries tenantId (Pattern B)', () => {
+			expect(userRow.tenantId).toBe(TEST_TENANT_ID);
+		});
 	});
 
 	describe('Session row shape', () => {
@@ -150,6 +164,10 @@ describe('Row Mappers', () => {
 			expect(sessionRow.user).toHaveProperty('username');
 			expect(sessionRow.user).toHaveProperty('role');
 		});
+
+		it('carries tenantId (Pattern B)', () => {
+			expect(sessionRow.tenantId).toBe(TEST_TENANT_ID);
+		});
 	});
 
 	describe('TOTP row shape', () => {
@@ -159,6 +177,10 @@ describe('Row Mappers', () => {
 			expect(totpRow).toHaveProperty('authTag');
 			expect(totpRow).toHaveProperty('salt');
 		});
+
+		it('carries tenantId (Pattern B)', () => {
+			expect(totpRow.tenantId).toBe(TEST_TENANT_ID);
+		});
 	});
 
 	describe('Audit event row shape', () => {
@@ -167,6 +189,10 @@ describe('Row Mappers', () => {
 			expect(auditRow).toHaveProperty('severity');
 			expect(auditRow).toHaveProperty('source');
 			expect(auditRow).toHaveProperty('timestamp');
+		});
+
+		it('carries tenantId (Pattern B)', () => {
+			expect(auditRow.tenantId).toBe(TEST_TENANT_ID);
 		});
 	});
 });
