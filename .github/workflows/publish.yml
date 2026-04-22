@@ -11,67 +11,85 @@ on:
         type: boolean
         default: true
 
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.13.1'
+
 jobs:
-  test:
+  verify:
     runs-on: ubuntu-latest
+    outputs:
+      npm_tag: ${{ steps.metadata.outputs.npm_tag }}
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
         with:
-          version: '9.15.9'
-      - uses: actions/setup-node@v4
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
-      - run: pnpm install --no-frozen-lockfile
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - run: pnpm test:unit
       - run: pnpm build
+      - name: Verify dist output
+        run: |
+          test -f dist/index.js || (echo "Missing dist/index.js" && exit 1)
+          test -f dist/index.d.ts || (echo "Missing dist/index.d.ts" && exit 1)
+      - name: Derive release metadata
+        id: metadata
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          if [[ "$VERSION" == *-* ]]; then
+            echo "npm_tag=beta" >> "$GITHUB_OUTPUT"
+          else
+            echo "npm_tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            TAG="${{ github.event.release.tag_name }}"
+            EXPECTED="v${VERSION}"
+            if [[ "$TAG" != "$EXPECTED" ]]; then
+              echo "Release tag ${TAG} does not match package.json version ${VERSION} (${EXPECTED})."
+              exit 1
+            fi
+          fi
 
   publish-npm:
-    needs: [test]
+    needs: [verify]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
+    env:
+      HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
         with:
-          version: '9.15.9'
-      - uses: actions/setup-node@v4
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
           registry-url: 'https://registry.npmjs.org'
-      - run: pnpm install --no-frozen-lockfile && pnpm build
-      - run: npm publish --access public --provenance
-        if: ${{ github.event_name == 'release' || github.event.inputs.dry_run != 'true' }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Publish to npm with repository token
+        if: ${{ (github.event_name == 'release' || github.event.inputs.dry_run != 'true') && env.HAS_NPM_TOKEN == 'true' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - run: npm publish --access public --dry-run
+        run: npm publish --access public --provenance --tag ${{ needs.verify.outputs.npm_tag }}
+      - name: Publish to npm with OIDC trusted publishing
+        if: ${{ (github.event_name == 'release' || github.event.inputs.dry_run != 'true') && env.HAS_NPM_TOKEN != 'true' }}
+        run: npm publish --access public --provenance --tag ${{ needs.verify.outputs.npm_tag }}
+      - name: Dry-run npm publish
         if: ${{ github.event.inputs.dry_run == 'true' }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  publish-github:
-    needs: [test]
-    runs-on: ubuntu-latest
-    permissions:
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: '9.15.9'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://npm.pkg.github.com'
-          scope: '@tummycrypt'
-      - run: pnpm install --no-frozen-lockfile && pnpm build
-      - run: npm publish
-        if: ${{ github.event_name == 'release' || github.event.inputs.dry_run != 'true' }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: npm publish --dry-run
-        if: ${{ github.event.inputs.dry_run == 'true' }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish --access public --provenance --dry-run --tag ${{ needs.verify.outputs.npm_tag }}
