@@ -4,6 +4,26 @@ All notable changes to `@tummycrypt/tinyland-auth-pg` will be documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this package uses pre-1.0 semver where **breaking changes bump the minor**.
 
+## [0.2.1] — 2026-04-22
+
+### Added
+
+- `createNodePgStorageAdapter({ connectionString, poolConfig? })` — a first-class
+  node-postgres factory for self-hosted PostgreSQL, CNPG, and local development.
+- `NodePgStorageAdapter` export, which owns a `pg.Pool` and closes it by default
+  when `adapter.close()` is called.
+- `NodePgStorageConfig` export for the new factory.
+- `src/__tests__/node-pg.test.ts` — end-to-end smoke coverage of the owned
+  node-postgres path against Postgres 16 via testcontainers.
+
+### Fixed
+
+- The package no longer forces self-hosted consumers to construct their own
+  drizzle node-postgres client just to avoid the legacy neon-only
+  `connectionString` path.
+- `Database` now includes the node-postgres drizzle database type, so the
+  driver-injection API matches the runtime support already described by v0.2.0.
+
 ## [0.2.0] — 2026-04-17
 
 ### Breaking Changes

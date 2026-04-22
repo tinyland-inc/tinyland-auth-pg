@@ -2,7 +2,9 @@
 
 PostgreSQL storage adapter for [@tummycrypt/tinyland-auth](https://github.com/Jesssullivan/tinyland-auth), backed by [Drizzle ORM](https://orm.drizzle.team) with driver-agnostic construction and multi-tenant scoping.
 
-Supports Neon HTTP, `postgres.js`, and `node-postgres` via drizzle driver injection. Designed for both serverless environments (Vercel, Cloudflare Workers) and self-hosted Postgres behind PgBouncer (Kubernetes, tailnets).
+Supports Neon HTTP, `postgres.js`, and `node-postgres`. Use `createNodePgStorageAdapter()`
+when you want the package to own a `pg.Pool`, or `createPgStorageAdapter({ db })`
+when you already have a pre-built Drizzle client.
 
 > **0.2.0 is a breaking release.** Every adapter method now takes `tenantId: string`
 > as its first parameter. Every row-bearing table has `tenant_id uuid NOT NULL`.
@@ -24,7 +26,20 @@ npm install @tummycrypt/tinyland-auth
 
 ## Quick Start (0.2.0+)
 
-### With `postgres.js` (recommended for self-hosted PG / PgBouncer)
+### With `node-postgres` (owned pool; recommended for CNPG / local PG)
+
+```typescript
+import { createNodePgStorageAdapter } from '@tummycrypt/tinyland-auth-pg';
+
+const adapter = createNodePgStorageAdapter({
+  connectionString: process.env.DATABASE_URL!,
+  poolConfig: { max: 10 },
+});
+
+const user = await adapter.getUser('<tenant-uuid>', '<user-id>');
+```
+
+### With `postgres.js` (recommended for PgBouncer transaction mode)
 
 ```typescript
 import postgres from 'postgres';
@@ -131,12 +146,26 @@ type PgStorageConfig =
 
 type Database =
   | NeonHttpDatabase<typeof schema>
+  | NodePgDatabase<typeof schema>
   | PostgresJsDatabase<typeof schema>;
 ```
 
 Both branches validate their input at construction time and throw loudly on
 nullish `db` or empty `connectionString` rather than deferring to the first
 query.
+
+### `createNodePgStorageAdapter(config: NodePgStorageConfig): NodePgStorageAdapter`
+
+Factory function that constructs and owns a `pg.Pool` for standard PostgreSQL.
+
+```typescript
+interface NodePgStorageConfig {
+  connectionString: string;
+  sessionMaxAge?: number;
+  poolConfig?: PoolConfig;
+  closeOnDispose?: boolean; // default true
+}
+```
 
 ### `PgStorageAdapter`
 
@@ -191,11 +220,16 @@ Every method accepts `tenantId: string` as its **first parameter** and returns
 > re-implement it then. Until then, consume the concrete class or type against
 > the exported method signatures directly.
 
+### `NodePgStorageAdapter`
+
+Subclass of `PgStorageAdapter` that exposes its owned `pool: Pool` and closes
+that pool by default when `adapter.close()` is called.
+
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DATABASE_URL` | Yes | Neon PostgreSQL connection string (pooled recommended for runtime, direct for migrations) |
+| `DATABASE_URL` | Yes | PostgreSQL connection string for Neon, CNPG, local PG, or other supported deployments |
 
 ## Development
 
