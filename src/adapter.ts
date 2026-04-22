@@ -17,9 +17,12 @@
 import { neon } from '@neondatabase/serverless';
 import { drizzle as drizzleNeon } from 'drizzle-orm/neon-http';
 import type { NeonHttpDatabase } from 'drizzle-orm/neon-http';
+import { drizzle as drizzleNodePg } from 'drizzle-orm/node-postgres';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, and, lt, gt, desc, sql, count as countFn } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
+import { Pool, type PoolConfig } from 'pg';
 import * as schema from './schema.js';
 import type { AuditEventFilters } from '@tummycrypt/tinyland-auth/storage';
 import type {
@@ -49,6 +52,7 @@ import type {
  */
 export type Database =
   | NeonHttpDatabase<typeof schema>
+  | NodePgDatabase<typeof schema>
   | PostgresJsDatabase<typeof schema>;
 
 /**
@@ -72,6 +76,20 @@ export type PgStorageConfig =
       /** Session TTL in milliseconds (default: 7 days) */
       sessionMaxAge?: number;
     };
+
+export interface NodePgStorageConfig {
+  /** PostgreSQL connection string for node-postgres. */
+  connectionString: string;
+  /** Session TTL in milliseconds (default: 7 days). */
+  sessionMaxAge?: number;
+  /** Optional pg.Pool config merged with the connection string. */
+  poolConfig?: PoolConfig;
+  /**
+   * Whether adapter.close() should end the owned pool.
+   * Defaults to true for factory-created node-postgres adapters.
+   */
+  closeOnDispose?: boolean;
+}
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -211,8 +229,9 @@ export class PgStorageAdapter {
   // in the query builder where overload resolution differs between drivers.
   private readonly db: NeonHttpDatabase<typeof schema>;
   private readonly sessionMaxAge: number;
+  private readonly closeFn?: () => Promise<void>;
 
-  constructor(config: PgStorageConfig) {
+  constructor(config: PgStorageConfig, closeFn?: () => Promise<void>) {
     if ('db' in config) {
       if (!config.db) {
         throw new Error(
@@ -230,6 +249,7 @@ export class PgStorageAdapter {
       this.db = drizzleNeon(client, { schema });
     }
     this.sessionMaxAge = config.sessionMaxAge ?? SEVEN_DAYS_MS;
+    this.closeFn = closeFn;
   }
 
   // ==========================================================================
@@ -242,9 +262,9 @@ export class PgStorageAdapter {
   }
 
   async close(): Promise<void> {
-    // Neon HTTP client is stateless — no connection to close
-    // For injected postgres.js / node-postgres drivers, the caller owns
-    // the connection lifecycle.
+    // Neon HTTP is stateless. Injected drivers are caller-owned.
+    // Factory-created node-postgres adapters install a disposer here.
+    await this.closeFn?.();
   }
 
   // ==========================================================================
@@ -919,6 +939,47 @@ export class PgStorageAdapter {
 }
 
 /**
+ * NodePgStorageAdapter — tenant-scoped adapter backed by an owned pg.Pool.
+ *
+ * Use this when the package should construct and optionally dispose the pool
+ * itself from a standard PostgreSQL connection string.
+ */
+export class NodePgStorageAdapter extends PgStorageAdapter {
+  readonly pool: Pool;
+
+  constructor(config: NodePgStorageConfig) {
+    if (!config.connectionString) {
+      throw new Error(
+        'NodePgStorageAdapter: `connectionString` is required',
+      );
+    }
+
+    const pool = new Pool({
+      ...config.poolConfig,
+      connectionString: config.connectionString,
+    });
+
+    const db = drizzleNodePg(pool, { schema });
+    const closeFn =
+      config.closeOnDispose === false
+        ? undefined
+        : async () => {
+            await pool.end();
+          };
+
+    super(
+      {
+        db,
+        sessionMaxAge: config.sessionMaxAge,
+      },
+      closeFn,
+    );
+
+    this.pool = pool;
+  }
+}
+
+/**
  * Factory function for creating a PgStorageAdapter.
  *
  * @example
@@ -933,3 +994,16 @@ export class PgStorageAdapter {
  */
 export const createPgStorageAdapter = (config: PgStorageConfig): PgStorageAdapter =>
   new PgStorageAdapter(config);
+
+/**
+ * Factory function for creating a node-postgres-backed PgStorageAdapter.
+ *
+ * @example
+ *   const adapter = createNodePgStorageAdapter({
+ *     connectionString: process.env.DATABASE_URL!,
+ *     poolConfig: { max: 10 },
+ *   });
+ */
+export const createNodePgStorageAdapter = (
+  config: NodePgStorageConfig,
+): NodePgStorageAdapter => new NodePgStorageAdapter(config);

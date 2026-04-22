@@ -1,6 +1,6 @@
 {
   "name": "@tummycrypt/tinyland-auth-pg",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -55,12 +55,14 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
-    "drizzle-orm": "0.39.3"
+    "drizzle-orm": "0.39.3",
+    "pg": "^8.20.0"
   },
   "peerDependencies": {
     "@tummycrypt/tinyland-auth": "^0.2.0"
   },
   "devDependencies": {
+    "@types/pg": "^8.20.0",
     "@testcontainers/postgresql": "^11.14.0",
     "drizzle-kit": "^0.30.5",
     "postgres": "^3.4.9",

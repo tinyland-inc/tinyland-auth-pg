@@ -246,6 +246,42 @@ describe('createPgStorageAdapter', () => {
 	});
 });
 
+describe('createNodePgStorageAdapter', () => {
+	it('exports factory function', async () => {
+		const mod = await import('../index.js');
+		expect(mod.createNodePgStorageAdapter).toBeDefined();
+		expect(typeof mod.createNodePgStorageAdapter).toBe('function');
+	});
+
+	it('throws with empty connection string', async () => {
+		const { createNodePgStorageAdapter } = await import('../index.js');
+		expect(() => createNodePgStorageAdapter({ connectionString: '' })).toThrow(
+			/`connectionString` is required/,
+		);
+	});
+
+	it('creates a node-postgres-backed adapter', async () => {
+		const { createNodePgStorageAdapter, NodePgStorageAdapter } = await import('../index.js');
+		const adapter = createNodePgStorageAdapter({
+			connectionString: 'postgresql://u:p@127.0.0.1:5432/db',
+		});
+
+		expect(adapter).toBeInstanceOf(NodePgStorageAdapter);
+		await adapter.close();
+	});
+
+	it('supports caller-owned pool lifecycle', async () => {
+		const { createNodePgStorageAdapter } = await import('../index.js');
+		const adapter = createNodePgStorageAdapter({
+			connectionString: 'postgresql://u:p@127.0.0.1:5432/db',
+			closeOnDispose: false,
+		});
+
+		await expect(adapter.close()).resolves.toBeUndefined();
+		await adapter.pool.end();
+	});
+});
+
 // ---------------------------------------------------------------------------
 // Adapter method signature tests
 // ---------------------------------------------------------------------------
@@ -305,9 +341,19 @@ describe('Package exports', () => {
 		expect(mod.createPgStorageAdapter).toBeDefined();
 	});
 
+	it('index exports createNodePgStorageAdapter', async () => {
+		const mod = await import('../index.js');
+		expect(mod.createNodePgStorageAdapter).toBeDefined();
+	});
+
 	it('index exports PgStorageAdapter class', async () => {
 		const mod = await import('../adapter.js');
 		expect(mod.PgStorageAdapter).toBeDefined();
+	});
+
+	it('index exports NodePgStorageAdapter class', async () => {
+		const mod = await import('../adapter.js');
+		expect(mod.NodePgStorageAdapter).toBeDefined();
 	});
 
 	it('schema exports auth tables', async () => {
