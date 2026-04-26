@@ -2,62 +2,35 @@ name: CI
 
 on:
   push:
-    branches: [main, 'dev/**']
+    branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  packages: read
 
 jobs:
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    env:
-      NODE_VERSION: '22'
-      PNPM_VERSION: '10.13.1'
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: pnpm/action-setup@v5
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run tests
-        run: pnpm test:unit
-
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    needs: [test]
-    env:
-      NODE_VERSION: '22'
-      PNPM_VERSION: '10.13.1'
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: pnpm/action-setup@v5
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm build
-
-      - name: Verify dist output
-        run: |
-          test -f dist/index.js || (echo "Missing dist/index.js" && exit 1)
-          test -f dist/index.d.ts || (echo "Missing dist/index.d.ts" && exit 1)
-          echo "Build artifacts verified"
+  package:
+    uses: tinyland-inc/ci-templates/.github/workflows/js-bazel-package.yml@0d3a9c1fb5198d0670b773e78d9dad6cc5867a98
+    with:
+      runner_mode: shared
+      shared_runner_labels_json: ${{ vars.PRIMARY_LINUX_RUNNER_LABELS_JSON }}
+      runner_labels_json: ${{ vars.PRIMARY_LINUX_RUNNER_LABELS_JSON }}
+      workspace_mode: isolated
+      publish_mode: same_runner
+      node_versions: '["22"]'
+      publish_node_version: "22"
+      pnpm_version: "10.13.1"
+      typecheck_command: pnpm typecheck
+      unit_test_command: pnpm test:unit
+      build_command: pnpm build
+      package_check_command: pnpm check:package
+      bazel_targets: "//:pkg //:test"
+      package_dir: ./bazel-bin/pkg
+      npm_access: public
+      github_package_name: "@tummycrypt/tinyland-auth-pg"
+      dry_run: true
+    secrets: inherit

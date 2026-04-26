@@ -2,56 +2,69 @@
   "name": "@tummycrypt/tinyland-auth-pg",
   "version": "0.2.1",
   "type": "module",
+  "packageManager": "pnpm@10.13.1",
   "license": "MIT",
+  "description": "PostgreSQL storage adapter for @tummycrypt/tinyland-auth",
+  "homepage": "https://github.com/tinyland-inc/tinyland-auth-pg",
+  "bugs": {
+    "url": "https://github.com/tinyland-inc/tinyland-auth-pg/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/tinyland-inc/tinyland-auth-pg.git"
+    "url": "git+https://github.com/tinyland-inc/tinyland-auth-pg.git"
   },
   "publishConfig": {
     "access": "public"
   },
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./schema": {
-      "import": "./dist/schema.js",
-      "types": "./dist/schema.d.ts"
+      "types": "./dist/schema.d.ts",
+      "import": "./dist/schema.js"
     },
     "./business-schema": {
-      "import": "./dist/business-schema.js",
-      "types": "./dist/business-schema.d.ts"
+      "types": "./dist/business-schema.d.ts",
+      "import": "./dist/business-schema.js"
     },
     "./content-schema": {
-      "import": "./dist/content-schema.js",
-      "types": "./dist/content-schema.d.ts"
+      "types": "./dist/content-schema.d.ts",
+      "import": "./dist/content-schema.js"
     },
     "./booking-schema": {
-      "import": "./dist/booking-schema.js",
-      "types": "./dist/booking-schema.d.ts"
+      "types": "./dist/booking-schema.d.ts",
+      "import": "./dist/booking-schema.js"
     },
     "./giftcert-schema": {
-      "import": "./dist/giftcert-schema.js",
-      "types": "./dist/giftcert-schema.d.ts"
+      "types": "./dist/giftcert-schema.d.ts",
+      "import": "./dist/giftcert-schema.js"
     },
     "./intake-schema": {
-      "import": "./dist/intake-schema.js",
-      "types": "./dist/intake-schema.d.ts"
+      "types": "./dist/intake-schema.d.ts",
+      "import": "./dist/intake-schema.js"
     }
   },
   "files": [
+    "CHANGELOG.md",
     "dist",
+    "drizzle",
+    "drizzle-public",
     "!dist/**/*.js.map"
   ],
   "scripts": {
     "build": "tsc",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run",
     "test:watch": "vitest watch",
+    "check:package": "publint",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "prepublishOnly": "pnpm build && pnpm check:package"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
@@ -62,10 +75,13 @@
     "@tummycrypt/tinyland-auth": "^0.2.0"
   },
   "devDependencies": {
-    "@types/pg": "^8.20.0",
+    "@tummycrypt/tinyland-auth": "^0.2.2",
     "@testcontainers/postgresql": "^11.14.0",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.20.0",
     "drizzle-kit": "^0.30.5",
     "postgres": "^3.4.9",
+    "publint": "^0.3.18",
     "testcontainers": "^11.14.0",
     "typescript": "5.9.3",
     "vitest": "^4.0.18"
