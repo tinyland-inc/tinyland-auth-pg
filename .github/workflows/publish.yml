@@ -6,90 +6,37 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Dry run (no actual publish)'
+        description: "Dry run without publishing"
         required: false
         type: boolean
         default: true
 
-concurrency:
-  group: publish-${{ github.ref }}
-  cancel-in-progress: false
-
-env:
-  NODE_VERSION: '22'
-  PNPM_VERSION: '10.13.1'
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+  packages: write
 
 jobs:
-  verify:
-    runs-on: ubuntu-latest
-    outputs:
-      npm_tag: ${{ steps.metadata.outputs.npm_tag }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm test:unit
-      - run: pnpm build
-      - name: Verify dist output
-        run: |
-          test -f dist/index.js || (echo "Missing dist/index.js" && exit 1)
-          test -f dist/index.d.ts || (echo "Missing dist/index.d.ts" && exit 1)
-      - name: Derive release metadata
-        id: metadata
-        shell: bash
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-
-          if [[ "$VERSION" == *-* ]]; then
-            echo "npm_tag=beta" >> "$GITHUB_OUTPUT"
-          else
-            echo "npm_tag=latest" >> "$GITHUB_OUTPUT"
-          fi
-
-          if [[ "${{ github.event_name }}" == "release" ]]; then
-            TAG="${{ github.event.release.tag_name }}"
-            EXPECTED="v${VERSION}"
-            if [[ "$TAG" != "$EXPECTED" ]]; then
-              echo "Release tag ${TAG} does not match package.json version ${VERSION} (${EXPECTED})."
-              exit 1
-            fi
-          fi
-
-  publish-npm:
-    needs: [verify]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          registry-url: 'https://registry.npmjs.org'
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - name: Publish to npm with repository token
-        if: ${{ (github.event_name == 'release' || github.event.inputs.dry_run != 'true') && env.HAS_NPM_TOKEN == 'true' }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --provenance --tag ${{ needs.verify.outputs.npm_tag }}
-      - name: Publish to npm with OIDC trusted publishing
-        if: ${{ (github.event_name == 'release' || github.event.inputs.dry_run != 'true') && env.HAS_NPM_TOKEN != 'true' }}
-        run: npm publish --access public --provenance --tag ${{ needs.verify.outputs.npm_tag }}
-      - name: Dry-run npm publish
-        if: ${{ github.event.inputs.dry_run == 'true' }}
-        run: npm publish --access public --provenance --dry-run --tag ${{ needs.verify.outputs.npm_tag }}
+  package:
+    uses: tinyland-inc/ci-templates/.github/workflows/js-bazel-package.yml@0d3a9c1fb5198d0670b773e78d9dad6cc5867a98
+    with:
+      runner_mode: shared
+      shared_runner_labels_json: ${{ vars.PRIMARY_LINUX_RUNNER_LABELS_JSON }}
+      runner_labels_json: ${{ vars.PRIMARY_LINUX_RUNNER_LABELS_JSON }}
+      workspace_mode: isolated
+      publish_mode: same_runner
+      node_versions: '["22"]'
+      publish_node_version: "22"
+      pnpm_version: "10.13.1"
+      typecheck_command: pnpm typecheck
+      unit_test_command: pnpm test:unit
+      build_command: pnpm build
+      package_check_command: pnpm check:package
+      bazel_targets: "//:pkg //:test"
+      package_dir: ./bazel-bin/pkg
+      npm_access: public
+      github_package_name: "@tummycrypt/tinyland-auth-pg"
+      dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

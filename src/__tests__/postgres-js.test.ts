@@ -6,9 +6,7 @@
  * share the same handle/email without colliding, and queries do not leak
  * across tenants.
  *
- * SKIPS automatically when no Docker daemon is reachable. CI (Linux) runs
- * it; local macOS dev machines without Docker Desktop / podman-compatible
- * socket will skip — which is correct.
+ * SKIPS automatically when no Docker/Podman runtime is discoverable.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -23,19 +21,12 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPgStorageAdapter } from '../adapter.js';
 import * as schema from '../schema.js';
+import { hasContainerRuntime } from './container-runtime.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Docker availability heuristic. testcontainers itself will try DOCKER_HOST
-// then fall back to /var/run/docker.sock. We skip the suite when neither
-// appears plausible to avoid multi-minute test timeouts on bare dev laptops.
-const hasDocker =
-	!!process.env.CI ||
-	!!process.env.DOCKER_HOST ||
-	process.platform === 'linux';
-
-describe.skipIf(!hasDocker)(
+describe.skipIf(!hasContainerRuntime())(
 	'postgres.js + tenant isolation smoke',
 	() => {
 		let container: StartedPostgreSqlContainer;
