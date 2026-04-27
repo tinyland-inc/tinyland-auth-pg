@@ -4,6 +4,13 @@ All notable changes to `@tummycrypt/tinyland-auth-pg` will be documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this package uses pre-1.0 semver where **breaking changes bump the minor**.
 
+## [0.2.2] — 2026-04-27
+
+### Fixed
+
+- Use a package-scoped Bazel npm repository name so this module composes with
+  sibling Bzlmod modules without exporting a generic `@npm` repo.
+
 ## [0.2.1] — 2026-04-22
 
 ### Added
