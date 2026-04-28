@@ -1,6 +1,6 @@
 {
   "name": "@tummycrypt/tinyland-auth-pg",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "type": "module",
   "packageManager": "pnpm@10.13.1",
   "license": "MIT",
@@ -72,10 +72,10 @@
     "pg": "^8.20.0"
   },
   "peerDependencies": {
-    "@tummycrypt/tinyland-auth": "^0.2.0"
+    "@tummycrypt/tinyland-auth": "^0.2.0 || ^0.3.0"
   },
   "devDependencies": {
-    "@tummycrypt/tinyland-auth": "^0.2.2",
+    "@tummycrypt/tinyland-auth": "^0.3.0",
     "@testcontainers/postgresql": "^11.14.0",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.20.0",

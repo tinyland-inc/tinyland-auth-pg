@@ -22,8 +22,8 @@ importers:
         specifier: ^11.14.0
         version: 11.14.0
       '@tummycrypt/tinyland-auth':
-        specifier: ^0.2.2
-        version: 0.2.2
+        specifier: ^0.3.0
+        version: 0.3.0
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.17
@@ -537,8 +537,8 @@ packages:
   '@testcontainers/postgresql@11.14.0':
     resolution: {integrity: sha512-wYbJn8GRTj8qfqzfVubxioYWlHJU/ImIjuzPwyy9C5Qfo6g3GLduPZAj+BifvqTZjgT3gd4gFVLCPhBji7dc1w==}
 
-  '@tummycrypt/tinyland-auth@0.2.2':
-    resolution: {integrity: sha512-HcuTX72ShsuwL00L4JHpCcNo3ow2af+gQdkXuzTEyLxVyMdrKtt5biFRhiTP/YMCBXZY9Ftunbjf0Q7JZ/06rQ==}
+  '@tummycrypt/tinyland-auth@0.3.0':
+    resolution: {integrity: sha512-RiDHH5EdhLS4uF2D/GEBAaVN3712E5Xtj9W4SnVycUE2BbVmIrCPTjif3vcHhwy0QmiwMNGKQWsRIXgHiMIcsw==}
     engines: {node: '>=22.0.0'}
     peerDependencies:
       '@sveltejs/kit': ^2.0.0
@@ -2047,7 +2047,7 @@ snapshots:
       - react-native-b4a
       - supports-color
 
-  '@tummycrypt/tinyland-auth@0.2.2':
+  '@tummycrypt/tinyland-auth@0.3.0':
     dependencies:
       bcryptjs: 2.4.3
       nanoid: 5.1.7
