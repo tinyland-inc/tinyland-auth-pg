@@ -70,6 +70,35 @@ const storage = createPgStorageAdapter({
 const user = await storage.getUser('<tenant-uuid>', '<user-id>');
 ```
 
+### Bootstrap deploy users
+
+Use `bootstrapUsers()` when an app needs to seed tenant-scoped admin users
+during deploy/startup without duplicating raw SQL.
+
+```typescript
+import { bootstrapUsers } from '@tummycrypt/tinyland-auth-pg';
+import { hashPassword } from '@tummycrypt/tinyland-auth';
+
+await bootstrapUsers({
+  pool, // existing pg.Pool, owned by the caller
+  tenantId,
+  users: [
+    {
+      handle: 'jess',
+      email: 'jess@example.com',
+      displayName: 'Jess Sullivan',
+      pin: '123456',
+      role: 'admin',
+    },
+  ],
+});
+```
+
+The helper accepts an existing tenant-scoped `storage` adapter, an existing
+`pg.Pool`, or a `connectionString`. Existing users are updated by default so
+password, role, email, and display name changes converge on rerun. Pass
+`updateExisting: false` to leave existing users untouched.
+
 ### Row-Level Security recommended pattern
 
 Pair the adapter with a `withTenant` wrapper at the app-layer so every query
@@ -166,6 +195,33 @@ interface NodePgStorageConfig {
   closeOnDispose?: boolean; // default true
 }
 ```
+
+### `bootstrapUsers(config: BootstrapUsersConfig): Promise<BootstrapUsersResult>`
+
+Idempotently seeds or updates tenant-scoped auth users through the adapter
+boundary. No raw SQL is required at the consumer.
+
+```typescript
+type BootstrapUsersConfig = {
+  tenantId: string;
+  users: Array<{
+    handle: string;
+    email: string;
+    displayName?: string;
+    pin?: string; // or the password field, or a precomputed hash
+    role: AdminRole;
+  }>;
+  updateExisting?: boolean; // default true
+} & (
+  | { storage: BootstrapUserStorage }
+  | { pool: Pool }
+  | { connectionString: string; poolConfig?: PoolConfig }
+);
+```
+
+Each user must provide one credential source: `pin`, a plaintext password, or
+a precomputed password hash. A custom `passwordHasher` may be supplied; when it
+is omitted, the helper uses `@tummycrypt/tinyland-auth`'s `hashPassword`.
 
 ### `PgStorageAdapter`
 
