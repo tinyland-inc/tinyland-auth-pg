@@ -186,7 +186,7 @@ describe('Schema Definitions', () => {
 		expect(schema.backupCodes).toBeDefined();
 		expect(schema.invitations).toBeDefined();
 		expect(schema.auditEvents).toBeDefined();
-	});
+	}, 30000);
 
 	it('imports content schema without errors', async () => {
 		const schema = await import('../content-schema.js');

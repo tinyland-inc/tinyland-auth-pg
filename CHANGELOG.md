@@ -4,6 +4,14 @@ All notable changes to `@tummycrypt/tinyland-auth-pg` will be documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this package uses pre-1.0 semver where **breaking changes bump the minor**.
 
+## [0.2.3] — 2026-04-28
+
+### Fixed
+
+- Broaden the `@tummycrypt/tinyland-auth` peer range to allow `0.3.x`
+  consumers while continuing to allow existing `0.2.x` consumers.
+- Validate the package against `@tummycrypt/tinyland-auth@0.3.0`.
+
 ## [0.2.2] — 2026-04-27
 
 ### Fixed
