@@ -4,6 +4,21 @@ All notable changes to `@tummycrypt/tinyland-auth-pg` will be documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this package uses pre-1.0 semver where **breaking changes bump the minor**.
 
+## [0.2.4] — 2026-04-28
+
+### Added
+
+- `bootstrapUsers({ storage | pool | connectionString, tenantId, users, passwordHasher? })`
+  as an idempotent tenant-scoped bootstrap helper for apps that seed admin
+  users during deploy/startup.
+- `./bootstrap-users` package export and root export for the helper and its
+  public types.
+
+### Fixed
+
+- Keep the bootstrap flow on the shared adapter boundary instead of requiring
+  consumers to duplicate raw SQL upsert logic.
+
 ## [0.2.3] — 2026-04-28
 
 ### Fixed

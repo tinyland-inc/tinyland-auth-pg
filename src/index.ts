@@ -11,12 +11,21 @@ export {
   createPgStorageAdapter,
   createNodePgStorageAdapter,
 } from './adapter.js';
+export { bootstrapUsers } from './bootstrap-users.js';
 export type {
   PgStorageConfig,
   NodePgStorageConfig,
   Database,
   TenantScoped,
 } from './adapter.js';
+export type {
+  BootstrapPasswordHasher,
+  BootstrapUserInput,
+  BootstrapUserResult,
+  BootstrapUserStorage,
+  BootstrapUsersConfig,
+  BootstrapUsersResult,
+} from './bootstrap-users.js';
 export * as schema from './schema.js';
 export * as businessSchema from './business-schema.js';
 export * as contentSchema from './content-schema.js';

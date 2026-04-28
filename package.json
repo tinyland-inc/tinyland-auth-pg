@@ -1,6 +1,6 @@
 {
   "name": "@tummycrypt/tinyland-auth-pg",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
   "packageManager": "pnpm@10.13.1",
   "license": "MIT",
@@ -20,6 +20,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./bootstrap-users": {
+      "types": "./dist/bootstrap-users.d.ts",
+      "import": "./dist/bootstrap-users.js"
     },
     "./schema": {
       "types": "./dist/schema.d.ts",
