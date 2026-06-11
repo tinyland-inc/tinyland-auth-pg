@@ -8,7 +8,9 @@ ts_project(
     tsconfig = "tsconfig.json",
     deps = [
         "@npm//@neondatabase/serverless",
+        "@npm//@types/pg",
         "@npm//drizzle-orm",
+        "@npm//pg",
         "@npm//@tummycrypt/tinyland-auth",
     ],
 )
@@ -17,6 +19,6 @@ npm_package(
     name = "pkg",
     srcs = [":tinyland-auth-pg", "package.json"],
     package = "@tummycrypt/tinyland-auth-pg",
-    version = "0.1.0",
+    version = "0.2.1",
     visibility = ["//visibility:public"],
 )

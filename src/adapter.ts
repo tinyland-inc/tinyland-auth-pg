@@ -1,13 +1,14 @@
 /**
  * PostgreSQL Storage Adapter for @tummycrypt/tinyland-auth
  *
- * Backed by Neon Serverless PG + Drizzle ORM.
+ * Supports both Neon Serverless PG (HTTP) and standard node-postgres drivers
+ * via Drizzle ORM.
  * Mirrors the RedisStorageAdapter API surface with SQL queries.
  */
 
 import { neon } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-http';
-import type { NeonHttpDatabase } from 'drizzle-orm/neon-http';
+import { drizzle as drizzleNeon } from 'drizzle-orm/neon-http';
+import { drizzle as drizzleNodePg } from 'drizzle-orm/node-postgres';
 import { eq, and, lt, gt, desc, sql, count as countFn } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import * as schema from './schema.js';
@@ -23,13 +24,29 @@ import type {
 } from '@tummycrypt/tinyland-auth/types';
 
 export interface PgStorageConfig {
-  /** Neon connection string (required) */
+  /** PostgreSQL connection string (required) */
   connectionString: string;
   /** Session TTL in milliseconds (default: 7 days) */
   sessionMaxAge?: number;
 }
 
+export interface NodePgStorageConfig extends PgStorageConfig {
+  /**
+   * Whether adapter.close() should end the underlying node-postgres client/pool.
+   * Defaults to true when this package creates the client internally.
+   */
+  closeOnDispose?: boolean;
+}
+
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+type AuthPgDatabase = ReturnType<typeof drizzleNeon>;
+
+interface PgStorageAdapterInit {
+  db: AuthPgDatabase;
+  sessionMaxAge?: number;
+  close?: () => Promise<void>;
+}
 
 // ---------------------------------------------------------------------------
 // Row → Domain mappers
@@ -146,14 +163,15 @@ const toAuditEvent = (row: AuditRow): AuditEvent => ({
 // Adapter
 // ---------------------------------------------------------------------------
 
-export class PgStorageAdapter implements IStorageAdapter {
-  private readonly db: NeonHttpDatabase<typeof schema>;
+class BasePgStorageAdapter implements IStorageAdapter {
+  protected readonly db: AuthPgDatabase;
   private readonly sessionMaxAge: number;
+  private readonly closeDb: () => Promise<void>;
 
-  constructor(config: PgStorageConfig) {
-    const client = neon(config.connectionString);
-    this.db = drizzle(client, { schema });
+  protected constructor(config: PgStorageAdapterInit) {
+    this.db = config.db;
     this.sessionMaxAge = config.sessionMaxAge ?? SEVEN_DAYS_MS;
+    this.closeDb = config.close ?? (async () => {});
   }
 
   // ==========================================================================
@@ -166,7 +184,7 @@ export class PgStorageAdapter implements IStorageAdapter {
   }
 
   async close(): Promise<void> {
-    // Neon HTTP client is stateless — no connection to close
+    await this.closeDb();
   }
 
   // ==========================================================================
@@ -676,8 +694,54 @@ export class PgStorageAdapter implements IStorageAdapter {
   }
 }
 
+export class PgStorageAdapter extends BasePgStorageAdapter {
+  constructor(config: PgStorageConfig) {
+    const client = neon(config.connectionString);
+    const db = drizzleNeon(client, { schema });
+
+    super({
+      db,
+      sessionMaxAge: config.sessionMaxAge,
+    });
+  }
+}
+
+export class NodePgStorageAdapter extends BasePgStorageAdapter {
+  constructor(config: NodePgStorageConfig) {
+    // Drizzle exposes a driver-specific DB type here; cast to the shared
+    // auth adapter DB shape because the CRUD/query surface we use is the same.
+    const db = drizzleNodePg(config.connectionString, {
+      schema,
+    }) as unknown as AuthPgDatabase;
+
+    super({
+      db,
+      sessionMaxAge: config.sessionMaxAge,
+      close: config.closeOnDispose === false
+        ? undefined
+        : async () => {
+          const client = (db as unknown as {
+            $client?: { end?: () => Promise<void> | void };
+          }).$client;
+
+          if (client?.end) {
+            await client.end();
+          }
+        },
+    });
+  }
+}
+
 /**
- * Factory function for creating a PgStorageAdapter
+ * Factory function for creating a Neon-backed PgStorageAdapter.
  */
 export const createPgStorageAdapter = (config: PgStorageConfig): PgStorageAdapter =>
   new PgStorageAdapter(config);
+
+/**
+ * Factory function for creating a node-postgres-backed adapter for standard
+ * PostgreSQL environments such as CNPG or local development.
+ */
+export const createNodePgStorageAdapter = (
+  config: NodePgStorageConfig,
+): NodePgStorageAdapter => new NodePgStorageAdapter(config);

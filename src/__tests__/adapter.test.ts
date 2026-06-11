@@ -223,6 +223,12 @@ describe('createPgStorageAdapter', () => {
 		expect(typeof mod.createPgStorageAdapter).toBe('function');
 	});
 
+	it('exports node-postgres factory function', async () => {
+		const mod = await import('../index.js');
+		expect(mod.createNodePgStorageAdapter).toBeDefined();
+		expect(typeof mod.createNodePgStorageAdapter).toBe('function');
+	});
+
 	it('throws with empty connection string', async () => {
 		const { createPgStorageAdapter } = await import('../index.js');
 		// neon() throws on empty/invalid connection string
@@ -260,11 +266,31 @@ describe('PgStorageAdapter interface', () => {
 		}
 	});
 
-	it('has 34 methods (lifecycle + CRUD)', async () => {
-		const { PgStorageAdapter } = await import('../adapter.js');
-		const methods = Object.getOwnPropertyNames(PgStorageAdapter.prototype)
-			.filter(m => m !== 'constructor' && typeof PgStorageAdapter.prototype[m as keyof typeof PgStorageAdapter.prototype] === 'function');
-		expect(methods.length).toBeGreaterThanOrEqual(31);
+	it('exposes lifecycle + CRUD methods across the prototype chain', async () => {
+		const { PgStorageAdapter, NodePgStorageAdapter } = await import('../adapter.js');
+
+		const collectMethods = (ctor: { prototype: object }) => {
+			const methods = new Set<string>();
+			let current: object | null = ctor.prototype;
+
+			while (current && current !== Object.prototype) {
+				for (const name of Object.getOwnPropertyNames(current)) {
+					if (name === 'constructor') continue;
+					if (typeof (current as Record<string, unknown>)[name] === 'function') {
+						methods.add(name);
+					}
+				}
+				current = Object.getPrototypeOf(current);
+			}
+
+			return methods;
+		};
+
+		const pgMethods = collectMethods(PgStorageAdapter);
+		const nodePgMethods = collectMethods(NodePgStorageAdapter);
+
+		expect(pgMethods.size).toBeGreaterThanOrEqual(31);
+		expect(nodePgMethods.size).toBeGreaterThanOrEqual(31);
 	});
 });
 
@@ -289,9 +315,19 @@ describe('Package exports', () => {
 		expect(mod.createPgStorageAdapter).toBeDefined();
 	});
 
+	it('index exports createNodePgStorageAdapter', async () => {
+		const mod = await import('../index.js');
+		expect(mod.createNodePgStorageAdapter).toBeDefined();
+	});
+
 	it('index exports PgStorageAdapter class', async () => {
 		const mod = await import('../adapter.js');
 		expect(mod.PgStorageAdapter).toBeDefined();
+	});
+
+	it('index exports NodePgStorageAdapter class', async () => {
+		const mod = await import('../adapter.js');
+		expect(mod.NodePgStorageAdapter).toBeDefined();
 	});
 
 	it('schema exports auth tables', async () => {

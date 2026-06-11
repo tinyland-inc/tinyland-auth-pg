@@ -2,11 +2,16 @@
  * @tummycrypt/tinyland-auth-pg
  *
  * PostgreSQL storage adapter for @tummycrypt/tinyland-auth,
- * backed by Neon Serverless PG + Drizzle ORM.
+ * supporting both Neon Serverless PG and standard node-postgres.
  */
 
-export { PgStorageAdapter, createPgStorageAdapter } from './adapter.js';
-export type { PgStorageConfig } from './adapter.js';
+export {
+  PgStorageAdapter,
+  NodePgStorageAdapter,
+  createPgStorageAdapter,
+  createNodePgStorageAdapter,
+} from './adapter.js';
+export type { PgStorageConfig, NodePgStorageConfig } from './adapter.js';
 export * as schema from './schema.js';
 export * as businessSchema from './business-schema.js';
 export * as contentSchema from './content-schema.js';
