@@ -23,11 +23,12 @@ jobs:
       node_versions: '["22"]'
       publish_node_version: "22"
       pnpm_version: "10.13.1"
-      typecheck_command: pnpm typecheck
-      unit_test_command: pnpm test:unit
-      build_command: pnpm build
-      package_check_command: pnpm check:package
-      bazel_targets: "//:pkg //:test"
+      metadata_check_command: nix develop --command just package-authority
+      typecheck_command: nix develop --command just typecheck
+      unit_test_command: nix develop --command just test-unit
+      build_command: nix develop --command just build
+      package_check_command: nix develop --command just package-check
+      bazel_targets: "//:pkg //:typecheck //:test //:package_authority_test //:package_artifact_test //:auth_runtime_link_test //:release_contract_test"
       package_dir: ./bazel-bin/pkg
       npm_access: public
       npm_publish_mode: disabled

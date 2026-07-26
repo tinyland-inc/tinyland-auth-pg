@@ -4,6 +4,35 @@ All notable changes to `@tummycrypt/tinyland-auth-pg` will be documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this package uses pre-1.0 semver where **breaking changes bump the minor**.
 
+## [0.2.5] - 2026-07-15
+
+### Changed
+
+- Resolve `@tummycrypt/tinyland-auth` source and types exclusively from the
+  exact `tummycrypt_tinyland_auth@0.3.0` Bzlmod dependency in
+  `tinyland-inc/bazel-registry`, then rewrap `//:pkg` with consumer-owned,
+  lock-derived third-party stores instead of an npm peer/development edge.
+- Generate the compatibility manifest under Bazel so its intentional
+  `@tummycrypt/tinyland-auth@^0.3.0` peer metadata does not restore a
+  first-party package-manager build edge. Canonical consumption remains the
+  `tummycrypt_tinyland_auth_pg` Bzlmod module.
+- Route compile, typecheck, tests, and package assembly through finite Bazel
+  targets. Non-dry publication now requires the triggering tag/ref to match the
+  manifest, module, and Bazel package version before the publisher job starts.
+- Keep npmjs publication disabled. The optional GitHub Packages compatibility
+  artifact is rewritten at publish time to
+  `@tinyland-inc/tinyland-auth-pg`; no npmjs
+  `@tummycrypt/tinyland-auth-pg@0.2.5` artifact is claimed.
+- Retire the alternate Nix pnpm/tsc package derivation; the flake now supplies
+  only the reproducible development shell for the Bazel authority.
+
+### Added
+
+- Contract coverage for package identity/version parity, first-party
+  package-manager edge rejection, the explicit Node runtime-store closure,
+  auth runtime resolution, an external Bzlmod consumer, release-ref rejection,
+  and both packaged SQL migration trees.
+
 ## [0.2.4] — 2026-04-28
 
 ### Added

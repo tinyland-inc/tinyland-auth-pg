@@ -58,8 +58,7 @@ export type Database =
 /**
  * Domain objects from `@tummycrypt/tinyland-auth/types` don't natively carry
  * `tenantId`. We widen locally so the adapter can surface the column without
- * a breaking cross-repo change. A follow-up `@tummycrypt/tinyland-auth@0.3.0`
- * will remove the need for this wrapper.
+ * changing the upstream domain model pinned by this package.
  */
 export type TenantScoped<T> = T & { tenantId: string };
 
@@ -217,11 +216,9 @@ const toAuditEvent = (row: AuditRow): TenantScoped<AuditEvent> => ({
 /**
  * PgStorageAdapter — driver-agnostic, tenant-scoped.
  *
- * NOTE (v0.2.0): this class no longer implements `IStorageAdapter` from
- * `@tummycrypt/tinyland-auth/storage`. That interface's method signatures
- * (e.g. `getUser(id)`) are incompatible with Pattern B (`getUser(tenantId, id)`).
- * A follow-up `@tummycrypt/tinyland-auth@0.3.0` will ship a tenant-aware
- * interface and this adapter will implement it then.
+ * This class exposes tinyland-auth's Pattern B tenant-scoped shape. The
+ * `IStorageAdapter` interface remains Pattern A (for example, `getUser(id)`),
+ * while this adapter requires `getUser(tenantId, id)`.
  */
 export class PgStorageAdapter {
   // Narrow to NeonHttpDatabase internally — runtime is compatible across drivers

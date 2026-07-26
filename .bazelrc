@@ -1,4 +1,8 @@
 common --enable_bzlmod
+common --registry=https://raw.githubusercontent.com/tinyland-inc/bazel-registry/main
+common --registry=https://bcr.bazel.build
+# rules_js 2.9.1 package links retain the execution tree's external layout.
+common --legacy_external_runfiles
 
 build --jobs=auto
 build --worker_sandboxing
